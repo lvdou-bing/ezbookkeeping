@@ -1,16 +1,16 @@
 <template>
     <f7-sheet swipe-to-close swipe-handler=".swipe-handler"
               style="height: auto" :opened="show" @sheet:open="onSheetOpen" @sheet:closed="onSheetClosed">
-        <f7-toolbar>
+        <f7-toolbar class="toolbar-with-swipe-handler">
             <div class="swipe-handler"></div>
             <div class="left">
-                <f7-link sheet-close :text="tt('Cancel')"></f7-link>
+                <f7-link sheet-close icon-f7="xmark"></f7-link>
             </div>
             <div class="right">
-                <f7-link :text="tt('Done')" @click="save"></f7-link>
+                <f7-button round fill icon-f7="checkmark_alt" @click="save"></f7-button>
             </div>
         </f7-toolbar>
-        <f7-page-content>
+        <f7-page-content class="margin-top">
             <div class="grid grid-cols-2 grid-gap">
                 <div>
                     <div class="schedule-frequency-type-container">
@@ -72,10 +72,12 @@ import { type CommonScheduleFrequencySelectionProps, useScheduleFrequencySelecti
 
 import { useUserStore } from '@/stores/user.ts';
 
+import { itemAndIndex } from '@/core/base.ts';
 import { type WeekDayValue } from '@/core/datetime.ts';
 import { ScheduledTemplateFrequencyType } from '@/core/template.ts';
 import { sortNumbersArray } from '@/lib/common.ts';
-import { type Framework7Dom, scrollToSelectedItem } from '@/lib/ui/mobile.ts';
+import { scrollToSelectedItem } from '@/lib/ui/common.ts';
+import { type Framework7Dom } from '@/lib/ui/mobile.ts';
 
 interface MobileScheduleFrequencySelectionProps extends CommonScheduleFrequencySelectionProps {
     show: boolean;
@@ -117,20 +119,20 @@ function changeFrequencyType(value: number): void {
 }
 
 function changeFrequencyValue(e: Event): void {
-    const value = parseInt((e.target as HTMLInputElement).value);
+    const currentValue = parseInt((e.target as HTMLInputElement).value);
 
     if ((e.target as HTMLInputElement).checked) {
-        for (let i = 0; i < currentFrequencyValue.value.length; i++) {
-            if (currentFrequencyValue.value[i] === value) {
+        for (const value of currentFrequencyValue.value) {
+            if (value === currentValue) {
                 return;
             }
         }
 
-        currentFrequencyValue.value.push(value);
+        currentFrequencyValue.value.push(currentValue);
     } else {
-        for (let i = 0; i < currentFrequencyValue.value.length; i++) {
-            if (currentFrequencyValue.value[i] === value) {
-                currentFrequencyValue.value.splice(i, 1);
+        for (const [value, index] of itemAndIndex(currentFrequencyValue.value)) {
+            if (value === currentValue) {
+                currentFrequencyValue.value.splice(index, 1);
                 break;
             }
         }
@@ -150,7 +152,7 @@ function close(): void {
 function onSheetOpen(event: { $el: Framework7Dom }): void {
     currentFrequencyType.value = props.type;
     currentFrequencyValue.value = getFrequencyValues(props.modelValue);
-    scrollToSelectedItem(event.$el, '.schedule-frequency-value-container', 'li.list-item-selected');
+    scrollToSelectedItem(event.$el[0], '.schedule-frequency-value-container', '.schedule-frequency-value-container', 'li.list-item-selected');
 }
 
 function onSheetClosed(): void {

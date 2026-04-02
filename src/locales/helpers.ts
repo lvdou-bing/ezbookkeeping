@@ -1,8 +1,13 @@
 import { useI18n as useVueI18n } from 'vue-i18n';
 import moment from 'moment-timezone';
-import 'moment-timezone/moment-timezone-utils';
 
-import type { PartialRecord, NameValue, TypeAndName, TypeAndDisplayName, LocalizedSwitchOption } from '@/core/base.ts';
+import {
+    type NameValue,
+    type TypeAndName,
+    type TypeAndNameWithAlternativeName,
+    type TypeAndDisplayName,
+    type LocalizedSwitchOption
+} from '@/core/base.ts';
 
 import {
     type LanguageInfo,
@@ -20,6 +25,11 @@ import {
     ALL_LANGUAGES as PERSIAN_CALENDAR_ALL_LANGUAGES,
     DEFAULT_CONTENT as PERSIAN_CALENDAR_DEFAULT_CONTENT
 } from '@/locales/calendar/persian/index.ts';
+
+import {
+    entries,
+    keys
+} from '@/core/base.ts';
 
 import {
     TextDirection
@@ -57,6 +67,7 @@ import {
     ShortDateFormat,
     LongTimeFormat,
     ShortTimeFormat,
+    DateFormatOrder,
     DateRange,
     DateRangeScene,
     LANGUAGE_DEFAULT_DATE_TIME_FORMAT_VALUE
@@ -118,7 +129,8 @@ import {
 
 import {
     TransactionEditScopeType,
-    TransactionTagFilterType
+    TransactionQuickSaveButtonStyle,
+    TransactionQuickAddButtonActionType
 } from '@/core/transaction.ts';
 
 import {
@@ -140,6 +152,14 @@ import {
 } from '@/core/statistics.ts';
 
 import {
+    TransactionExplorerConditionField,
+    TransactionExplorerConditionOperator,
+    TransactionExplorerDataDimension,
+    TransactionExplorerValueMetric,
+    TransactionExplorerChartType
+} from '@/core/explorer.ts';
+
+import {
     type LocalizedImportFileCategoryAndTypes,
     type LocalizedImportFileType,
     type LocalizedImportFileTypeSubType,
@@ -155,6 +175,7 @@ import { UTC_TIMEZONE, ALL_TIMEZONES } from '@/consts/timezone.ts';
 import { ALL_CURRENCIES } from '@/consts/currency.ts';
 import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, DEFAULT_TRANSFER_CATEGORIES } from '@/consts/category.ts';
 import { KnownErrorCode, SPECIFIED_API_NOT_FOUND_ERRORS, PARAMETERIZED_ERRORS } from '@/consts/api.ts';
+import { OAUTH2_PROVIDER_DISPLAY_NAME } from '@/consts/oauth2.ts';
 import { DEFAULT_DOCUMENT_LANGUAGE_FOR_IMPORT_FILE, SUPPORTED_DOCUMENT_LANGUAGES_FOR_IMPORT_FILE, SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES } from '@/consts/file.ts';
 
 import {
@@ -177,12 +198,14 @@ import {
     formatCurrentTime,
     formatGregorianCalendarYearDashMonthDashDay,
     formatGregorianCalendarMonthDashDay,
+    formatDateTime,
     formatUnixTime,
     getBrowserTimezoneOffset,
     getBrowserTimezoneOffsetMinutes,
     getCurrentUnixTime,
     getYearMonthDayDateTime,
     parseDateTimeFromUnixTime,
+    parseDateTimeFromString,
     getGregorianCalendarYearMonthDays,
     getDateTimeFormatType,
     getFiscalYearTimeRangeFromUnixTime,
@@ -191,6 +214,7 @@ import {
     getTimeDifferenceHoursAndMinutes,
     getTimezoneOffset,
     getTimezoneOffsetMinutes,
+    getBrowserTimezoneName,
     isDateRangeMatchFullMonths,
     isDateRangeMatchFullYears,
     isPM
@@ -257,12 +281,7 @@ export function getI18nOptions(): object {
         messages: (function () {
             const messages: Record<string, object> = {};
 
-            for (const languageKey in ALL_LANGUAGES) {
-                if (!Object.prototype.hasOwnProperty.call(ALL_LANGUAGES, languageKey)) {
-                    continue;
-                }
-
-                const languageInfo = ALL_LANGUAGES[languageKey];
+            for (const [languageKey, languageInfo] of entries(ALL_LANGUAGES)) {
                 messages[languageKey] = languageInfo.content;
             }
 
@@ -274,13 +293,7 @@ export function getI18nOptions(): object {
 export function getRtlLocales(): Record<string, boolean> {
     const rtlLocales: Record<string, boolean> = {};
 
-    for (const languageKey in ALL_LANGUAGES) {
-        if (!Object.prototype.hasOwnProperty.call(ALL_LANGUAGES, languageKey)) {
-            continue;
-        }
-
-        const languageInfo = ALL_LANGUAGES[languageKey];
-
+    for (const [languageKey, languageInfo] of entries(ALL_LANGUAGES)) {
         if (languageInfo.textDirection === 'rtl') {
             rtlLocales[languageKey] = true;
         }
@@ -346,7 +359,7 @@ export function useI18n() {
 
         // fallback to use marco language tag
         if (languageTagParts.length > 1) {
-            browserLanguage = languageTagParts[0];
+            browserLanguage = languageTagParts[0] as string;
 
             // try to match marco language tag with full language tag in i18n file
             if (ALL_LANGUAGES[browserLanguage]) {
@@ -373,24 +386,19 @@ export function useI18n() {
     }
 
     function getLanguageKeyFromLanguageAlias(alias: string): string | null {
-        for (const languageKey in ALL_LANGUAGES) {
-            if (!Object.prototype.hasOwnProperty.call(ALL_LANGUAGES, languageKey)) {
-                continue;
-            }
-
+        for (const [languageKey, languageInfo] of entries(ALL_LANGUAGES)) {
             if (languageKey.toLowerCase() === alias.toLowerCase()) {
                 return languageKey;
             }
 
-            const langInfo = ALL_LANGUAGES[languageKey];
-            const aliases = langInfo.aliases;
+            const aliases = languageInfo.aliases;
 
             if (!aliases || aliases.length < 1) {
                 continue;
             }
 
-            for (let i = 0; i < aliases.length; i++) {
-                if (aliases[i].toLowerCase() === alias.toLowerCase()) {
+            for (const aliasName of aliases) {
+                if (aliasName.toLowerCase() === alias.toLowerCase()) {
                     return languageKey;
                 }
             }
@@ -400,16 +408,12 @@ export function useI18n() {
     }
 
     function getLanguageKeyFromMarcoLanguageTag(languageTag: string): string | null {
-        for (const languageKey in ALL_LANGUAGES) {
-            if (!Object.prototype.hasOwnProperty.call(ALL_LANGUAGES, languageKey)) {
-                continue;
-            }
-
+        for (const languageKey of keys(ALL_LANGUAGES)) {
             if (languageKey.indexOf('-') < 0) {
                 continue;
             }
 
-            const marcoLanguageTag = languageKey.split('-')[0];
+            const marcoLanguageTag = languageKey.split('-')[0] as string;
 
             if (marcoLanguageTag.toLowerCase() === languageTag.toLowerCase()) {
                 return languageKey;
@@ -422,7 +426,7 @@ export function useI18n() {
     function getLocalizedError(error: ErrorResponse): LocalizedError {
         if (error.errorCode === KnownErrorCode.ApiNotFound && SPECIFIED_API_NOT_FOUND_ERRORS[error.path]) {
             return {
-                message: `${SPECIFIED_API_NOT_FOUND_ERRORS[error.path].message}`
+                message: `${SPECIFIED_API_NOT_FOUND_ERRORS[error.path]!.message}`
             };
         }
 
@@ -432,8 +436,7 @@ export function useI18n() {
             };
         }
 
-        for (let i = 0; i < PARAMETERIZED_ERRORS.length; i++) {
-            const errorInfo = PARAMETERIZED_ERRORS[i];
+        for (const errorInfo of PARAMETERIZED_ERRORS) {
             const matches = error.errorMessage.match(errorInfo.regex);
 
             if (matches && matches.length === errorInfo.parameters.length + 1) {
@@ -443,7 +446,7 @@ export function useI18n() {
                         return {
                             key: param.field,
                             localized: param.localized,
-                            value: matches[index + 1]
+                            value: matches[index + 1] as string
                         }
                     })
                 };
@@ -459,9 +462,7 @@ export function useI18n() {
         const localizedParameters: Record<string, string> = {};
 
         if (parameters) {
-            for (let i = 0; i < parameters.length; i++) {
-                const parameter = parameters[i];
-
+            for (const parameter of parameters) {
                 if (parameter.localized) {
                     localizedParameters[parameter.key] = t(`parameter.${parameter.value}`);
                 } else {
@@ -520,8 +521,7 @@ export function useI18n() {
 
         const allCurrencyDisplayTypes = CurrencyDisplayType.values();
 
-        for (let i = 0; i < allCurrencyDisplayTypes.length; i++) {
-            const type = allCurrencyDisplayTypes[i];
+        for (const type of allCurrencyDisplayTypes) {
             const sampleValue = getFormattedAmountWithCurrency(12345, defaultCurrency, type, numeralSystem, decimalSeparator);
             const displayName = `${t(type.name)} (${sampleValue})`
 
@@ -534,7 +534,7 @@ export function useI18n() {
         return ret;
     }
 
-    function getAllLocalizedCalendarTypes(allTypeAndNameArray: CalendarDisplayType[] | DateDisplayType[], localeDefaultType: CalendarDisplayType | DateDisplayType | undefined, systemDefaultType: CalendarDisplayType | DateDisplayType, languageDefaultValue: number): TypeAndDisplayName[] {
+    function getAllLocalizedCalendarTypes(allCalendarDisplayTypeArray: CalendarDisplayType[] | DateDisplayType[], localeDefaultType: CalendarDisplayType | DateDisplayType | undefined, systemDefaultType: CalendarDisplayType | DateDisplayType, languageDefaultValue: number): TypeAndDisplayName[] {
         let defaultType: TypeAndName | undefined = localeDefaultType;
 
         if (!defaultType) {
@@ -548,27 +548,42 @@ export function useI18n() {
             displayName: `${t('Language Default')} (${t('calendar.' + defaultType.name)})`
         });
 
-        for (let i = 0; i < allTypeAndNameArray.length; i++) {
-            const type = allTypeAndNameArray[i];
-
+        for (const calendarDisplayType of allCalendarDisplayTypeArray) {
             ret.push({
-                type: type.type,
-                displayName: t('calendar.' + type.name)
+                type: calendarDisplayType.type,
+                displayName: t('calendar.' + calendarDisplayType.name)
             });
         }
 
         return ret;
     }
 
-    function getLocalizedDisplayNameAndType(typeAndNames: TypeAndName[]): TypeAndDisplayName[] {
+    function getLocalizedDisplayNameAndType(typeAndNames: TypeAndName[] | TypeAndNameWithAlternativeName[], useAlternativeName?: boolean): TypeAndDisplayName[] {
         const ret: TypeAndDisplayName[] = [];
 
-        for (let i = 0; i < typeAndNames.length; i++) {
-            const nameAndType = typeAndNames[i];
+        for (const typeAndName of typeAndNames) {
+            let name: string = typeAndName.name;
+
+            if (useAlternativeName && 'alternativeName' in typeAndName && typeAndName.alternativeName) {
+                name = typeAndName.alternativeName;
+            }
 
             ret.push({
-                type: nameAndType.type,
-                displayName: t(nameAndType.name)
+                type: typeAndName.type,
+                displayName: t(name)
+            });
+        }
+
+        return ret;
+    }
+
+    function getLocalizedNameValue(nameValues: NameValue[]): NameValue[] {
+        const ret: NameValue[] = [];
+
+        for (const nameValue of nameValues) {
+            ret.push({
+                name: t(nameValue.name),
+                value: nameValue.value
             });
         }
 
@@ -583,12 +598,10 @@ export function useI18n() {
             displayName: t('System Default') + (defaultType.name ? ` (${t(defaultType.name)})` : '')
         });
 
-        for (let i = 0; i < typeAndNames.length; i++) {
-            const nameAndType = typeAndNames[i];
-
+        for (const typeAndName of typeAndNames) {
             ret.push({
-                type: nameAndType.type,
-                displayName: t(nameAndType.name)
+                type: typeAndName.type,
+                displayName: t(typeAndName.name)
             });
         }
 
@@ -610,26 +623,22 @@ export function useI18n() {
             displayName: `${t('Language Default')} (${defaultSeparatorType.symbol})`
         });
 
-        for (let i = 0; i < allSeparatorArray.length; i++) {
-            const type = allSeparatorArray[i];
-
+        for (const separator of allSeparatorArray) {
             ret.push({
-                type: type.type,
-                symbol: type.symbol,
-                displayName: `${t('numeral.' + type.name)} (${type.symbol})`
+                type: separator.type,
+                symbol: separator.symbol,
+                displayName: `${t('numeral.' + separator.name)} (${separator.symbol})`
             });
         }
 
         return ret;
     }
 
-    function getLocalizedChartDateAggregationTypeAndDisplayName(fullName: boolean): TypeAndDisplayName[] {
+    function getLocalizedChartDateAggregationTypeAndDisplayName(analysisType: StatisticsAnalysisType, fullName: boolean): TypeAndDisplayName[] {
         const ret: TypeAndDisplayName[] = [];
-        const allTypes: ChartDateAggregationType[] = ChartDateAggregationType.values();
+        const allTypes: ChartDateAggregationType[] = ChartDateAggregationType.values(analysisType);
 
-        for (let i = 0; i < allTypes.length; i++) {
-            const type = allTypes[i];
-
+        for (const type of allTypes) {
             ret.push({
                 type: type.type,
                 displayName: t(fullName ? type.fullName : `granularity.${type.shortName}`)
@@ -643,8 +652,7 @@ export function useI18n() {
         const ret = [];
         const allMonths = Month.values();
 
-        for (let i = 0; i < allMonths.length; i++) {
-            const month = allMonths[i];
+        for (const month of allMonths) {
             ret.push(t(`datetime.${month.name}.${type}`));
         }
 
@@ -655,8 +663,7 @@ export function useI18n() {
         const ret = [];
         const allWeekDays = WeekDay.values();
 
-        for (let i = 0; i < allWeekDays.length; i++) {
-            const weekDay = allWeekDays[i];
+        for (const weekDay of allWeekDays) {
             ret.push(t(`datetime.${weekDay.name}.${type}`));
         }
 
@@ -669,7 +676,7 @@ export function useI18n() {
 
     function getLocalizedDateTimeFormat<T extends DateFormat | TimeFormat>(type: string, allFormatMap: Record<string, T>, allFormatArray: T[], formatTypeValue: number, languageDefaultTypeNameKey: string, systemDefaultFormatType: T): string {
         const formatType = getLocalizedDateTimeType(allFormatMap, allFormatArray, formatTypeValue, languageDefaultTypeNameKey, systemDefaultFormatType);
-        return t(`format.${type}.${formatType.key}`);
+        return t(`format.${type}.${formatType.typeName}`);
     }
 
     function getLocalizedLongDateFormat(): string {
@@ -793,10 +800,12 @@ export function useI18n() {
     }
 
     function formatYearQuarter(year: string, quarter: number): string {
-        if (1 <= quarter && quarter <= 4) {
-            return t('format.yearQuarter.q' + quarter, {
+        const quarterName = getQuarterName(quarter);
+
+        if (quarterName) {
+            return t('format.yearQuarter.content', {
                 year: year,
-                quarter: quarter
+                quarter: getQuarterName(quarter)
             });
         } else {
             return '';
@@ -808,8 +817,10 @@ export function useI18n() {
             format = FiscalYearFormat.Default;
         }
 
-        if (!isDefined(calendarType) || !isGregorianLikeCalendarType(calendarType)) {
+        if (!isDefined(calendarType)) {
             calendarType = getGregorianLikeCalendarType();
+        } else if (!isGregorianLikeCalendarType(calendarType)) {
+            calendarType = CalendarType.Gregorian;
         }
 
         const dateTimeFormatOptions = getDateTimeFormatOptions({
@@ -898,18 +909,18 @@ export function useI18n() {
         return textArray.join(separator);
     }
 
-    function getServerTipContent(tipConfig: Record<string, string>): string {
-        if (!tipConfig) {
+    function getServerMultiLanguageConfigContent(multiLanguageConfig: Record<string, string>): string {
+        if (!multiLanguageConfig) {
             return '';
         }
 
         const currentLanguage = getCurrentLanguageTag();
 
-        if (isString(tipConfig[currentLanguage])) {
-            return tipConfig[currentLanguage];
+        if (isString(multiLanguageConfig[currentLanguage])) {
+            return multiLanguageConfig[currentLanguage];
         }
 
-        return tipConfig['default'] || '';
+        return multiLanguageConfig['default'] || '';
     }
 
     function getCurrentLanguageTag(): string {
@@ -952,17 +963,12 @@ export function useI18n() {
     function getAllLanguageOptions(includeSystemDefault: boolean): LanguageOption[] {
         const ret: LanguageOption[] = [];
 
-        for (const languageTag in ALL_LANGUAGES) {
-            if (!Object.prototype.hasOwnProperty.call(ALL_LANGUAGES, languageTag)) {
-                continue;
-            }
-
-            const languageInfo = ALL_LANGUAGES[languageTag];
+        for (const [languageKey, languageInfo] of entries(ALL_LANGUAGES)) {
             const displayName = languageInfo.displayName;
             const languageNameInCurrentLanguage = getLanguageDisplayName(languageInfo.name);
 
             ret.push({
-                languageTag: languageTag,
+                languageTag: languageKey,
                 displayName: languageNameInCurrentLanguage,
                 nativeDisplayName: displayName
             });
@@ -996,11 +1002,7 @@ export function useI18n() {
     function getAllCurrencies(): LocalizedCurrencyInfo[] {
         const allCurrencies: LocalizedCurrencyInfo[] = [];
 
-        for (const currencyCode in ALL_CURRENCIES) {
-            if (!Object.prototype.hasOwnProperty.call(ALL_CURRENCIES, currencyCode)) {
-                continue;
-            }
-
+        for (const currencyCode of keys(ALL_CURRENCIES)) {
             const localizedCurrencyInfo: LocalizedCurrencyInfo = {
                 currencyCode: currencyCode,
                 displayName: getCurrencyName(currencyCode)
@@ -1020,9 +1022,7 @@ export function useI18n() {
         const allMeridiemIndicators = MeridiemIndicator.values();
         const localizedMeridiemIndicatorNames = [];
 
-        for (let i = 0; i < allMeridiemIndicators.length; i++) {
-            const indicator = allMeridiemIndicators[i];
-
+        for (const indicator of allMeridiemIndicators) {
             localizedMeridiemIndicatorNames.push({
                 name: t(`datetime.${indicator.name}.content`),
                 value: indicator.name
@@ -1061,7 +1061,7 @@ export function useI18n() {
         }
 
         for (let i = firstDayOfWeek; i < allWeekDays.length; i++) {
-            const weekDay = allWeekDays[i];
+            const weekDay = allWeekDays[i] as WeekDay;
 
             ret.push({
                 type: weekDay.type,
@@ -1070,7 +1070,7 @@ export function useI18n() {
         }
 
         for (let i = 0; i < firstDayOfWeek; i++) {
-            const weekDay = allWeekDays[i];
+            const weekDay = allWeekDays[i] as WeekDay;
 
             ret.push({
                 type: weekDay.type,
@@ -1092,9 +1092,8 @@ export function useI18n() {
             displayName: `${t('Language Default')} (${formatCurrentTime(defaultFormat, dateTimeFormatOptions)})`
         });
 
-        for (let i = 0; i < allFormatArray.length; i++) {
-            const formatType = allFormatArray[i];
-            const format = t(`format.${type}.${formatType.key}`);
+        for (const formatType of allFormatArray) {
+            const format = t(`format.${type}.${formatType.typeName}`);
 
             ret.push({
                 type: formatType.type,
@@ -1110,9 +1109,7 @@ export function useI18n() {
         const ret: LocalizedDateRange[] = [];
         const allDateRanges = DateRange.values();
 
-        for (let i = 0; i < allDateRanges.length; i++) {
-            const dateRange = allDateRanges[i];
-
+        for (const dateRange of allDateRanges) {
             if (!dateRange.isAvailableForScene(scene)) {
                 continue;
             }
@@ -1158,9 +1155,7 @@ export function useI18n() {
             });
         }
 
-        for (let i = 0; i < recentDateRanges.length; i++) {
-            const recentDateRange = recentDateRanges[i];
-
+        for (const recentDateRange of recentDateRanges) {
             allRecentMonthDateRanges.push({
                 dateType: recentDateRange.dateType,
                 minTime: recentDateRange.minTime,
@@ -1184,20 +1179,20 @@ export function useI18n() {
         return allRecentMonthDateRanges;
     }
 
-    function getAllTimezones(includeSystemDefault?: boolean): LocalizedTimezoneInfo[] {
+    function getAllTimezones(unixTime: number, includeSystemDefault?: boolean): LocalizedTimezoneInfo[] {
         const numeralSystem = getCurrentNumeralSystemType();
-        const defaultTimezoneOffset = numeralSystem.replaceWesternArabicDigitsToLocalizedDigits(getBrowserTimezoneOffset());
-        const defaultTimezoneOffsetMinutes = getBrowserTimezoneOffsetMinutes();
+        const defaultTimezoneOffset = numeralSystem.replaceWesternArabicDigitsToLocalizedDigits(getBrowserTimezoneOffset(unixTime));
+        const defaultTimezoneOffsetMinutes = getBrowserTimezoneOffsetMinutes(unixTime);
         const allTimezoneInfos: LocalizedTimezoneInfo[] = [];
 
-        for (let i = 0; i < ALL_TIMEZONES.length; i++) {
-            const utcOffset = (ALL_TIMEZONES[i].timezoneName !== UTC_TIMEZONE.timezoneName ? numeralSystem.replaceWesternArabicDigitsToLocalizedDigits(getTimezoneOffset(ALL_TIMEZONES[i].timezoneName)) : '');
-            const displayName = t(`timezone.${ALL_TIMEZONES[i].displayName}`);
+        for (const timezoneInfo of ALL_TIMEZONES) {
+            const utcOffset = (timezoneInfo.timezoneName !== UTC_TIMEZONE.timezoneName ? numeralSystem.replaceWesternArabicDigitsToLocalizedDigits(getTimezoneOffset(unixTime, timezoneInfo.timezoneName)) : '');
+            const displayName = t(`timezone.${timezoneInfo.displayName}`);
 
             allTimezoneInfos.push({
-                name: ALL_TIMEZONES[i].timezoneName,
+                name: timezoneInfo.timezoneName,
                 utcOffset: utcOffset,
-                utcOffsetMinutes: getTimezoneOffsetMinutes(ALL_TIMEZONES[i].timezoneName),
+                utcOffsetMinutes: getTimezoneOffsetMinutes(unixTime, timezoneInfo.timezoneName),
                 displayName: displayName,
                 displayNameWithUtcOffset: `(UTC${utcOffset}) ${displayName}`
             });
@@ -1231,7 +1226,7 @@ export function useI18n() {
 
     function getAllTimezoneTypesUsedForStatistics(currentTimezone?: string): TypeAndDisplayName[] {
         const numeralSystem = getCurrentNumeralSystemType();
-        const currentTimezoneOffset = numeralSystem.replaceWesternArabicDigitsToLocalizedDigits(getTimezoneOffset(currentTimezone));
+        const currentTimezoneOffset = numeralSystem.replaceWesternArabicDigitsToLocalizedDigits(getTimezoneOffset(getCurrentUnixTime(), currentTimezone));
 
         return [
             {
@@ -1269,9 +1264,7 @@ export function useI18n() {
 
         const allFiscalYearFormats = FiscalYearFormat.values();
 
-        for (let i = 0; i < allFiscalYearFormats.length; i++) {
-            const fiscalYearFormat = allFiscalYearFormats[i];
-
+        for (const fiscalYearFormat of allFiscalYearFormats) {
             ret.push({
                 type: fiscalYearFormat.type,
                 displayName: formatTimeRangeToGregorianLikeFiscalYearFormat(fiscalYearFormat, currentFiscalYearRange, numeralSystem, calendarType),
@@ -1298,9 +1291,7 @@ export function useI18n() {
 
         const allNumeralSystemTypes = NumeralSystem.values();
 
-        for (let i = 0; i < allNumeralSystemTypes.length; i++) {
-            const type = allNumeralSystemTypes[i];
-
+        for (const type of allNumeralSystemTypes) {
             ret.push({
                 type: type.type,
                 displayName: `${t('numeral.' + type.name)} (${type.textualAllDigits})`
@@ -1329,8 +1320,7 @@ export function useI18n() {
         const allDigitGroupingTypes = DigitGroupingType.values();
         const numberCharacters = numeralSystem.replaceWesternArabicDigitsToLocalizedDigits('123456789').split('');
 
-        for (let i = 0; i < allDigitGroupingTypes.length; i++) {
-            const type = allDigitGroupingTypes[i];
+        for (const type of allDigitGroupingTypes) {
             const sampleValue = type.format(numberCharacters, digitGroupingSymbol);
 
             ret.push({
@@ -1364,9 +1354,7 @@ export function useI18n() {
 
         const allPresetAmountColors = PresetAmountColor.values();
 
-        for (let i = 0; i < allPresetAmountColors.length; i++) {
-            const amountColor = allPresetAmountColors[i];
-
+        for (const amountColor of allPresetAmountColors) {
             ret.push({
                 type: amountColor.type,
                 displayName: t('color.amount.' + amountColor.name)
@@ -1376,13 +1364,11 @@ export function useI18n() {
         return ret;
     }
 
-    function getAllAccountCategories(): LocalizedAccountCategory[] {
+    function getAllAccountCategories(customAccountCategoryOrder: string): LocalizedAccountCategory[] {
         const ret: LocalizedAccountCategory[] = [];
-        const allCategories = AccountCategory.values();
+        const allCategories = AccountCategory.values(customAccountCategoryOrder);
 
-        for (let i = 0; i < allCategories.length; i++) {
-            const accountCategory = allCategories[i];
-
+        for (const accountCategory of allCategories) {
             ret.push({
                 type: accountCategory.type,
                 displayName: t(accountCategory.name),
@@ -1393,8 +1379,8 @@ export function useI18n() {
         return ret;
     }
 
-    function getAllTransactionDefaultCategories(categoryType: 0 | CategoryType, locale: string): PartialRecord<CategoryType, LocalizedPresetCategory[]> {
-        const allCategories: PartialRecord<CategoryType, LocalizedPresetCategory[]> = {};
+    function getAllTransactionDefaultCategories(categoryType: 0 | CategoryType, locale: string): Record<string, LocalizedPresetCategory[]> {
+        const allCategories: Record<string, LocalizedPresetCategory[]> = {};
         const categoryTypes: CategoryType[] = [];
 
         if (categoryType === 0) {
@@ -1403,9 +1389,8 @@ export function useI18n() {
             categoryTypes.push(categoryType);
         }
 
-        for (let i = 0; i < categoryTypes.length; i++) {
+        for (const categoryType of categoryTypes) {
             const categories: LocalizedPresetCategory[] = [];
-            const categoryType = categoryTypes[i];
             let defaultCategories: PresetCategory[] = [];
 
             if (categoryType === CategoryType.Income) {
@@ -1416,9 +1401,7 @@ export function useI18n() {
                 defaultCategories = DEFAULT_TRANSFER_CATEGORIES;
             }
 
-            for (let j = 0; j < defaultCategories.length; j++) {
-                const category = defaultCategories[j];
-
+            for (const category of defaultCategories) {
                 const submitCategory: LocalizedPresetCategory = {
                     name: t('category.' + category.name, {}, { locale: locale }),
                     type: categoryType,
@@ -1427,8 +1410,7 @@ export function useI18n() {
                     subCategories: []
                 };
 
-                for (let k = 0; k < category.subCategories.length; k++) {
-                    const subCategory = category.subCategories[k];
+                for (const subCategory of category.subCategories) {
                     const submitSubCategory: LocalizedPresetSubCategory = {
                         name: t('category.' + subCategory.name, {}, { locale: locale }),
                         type: categoryType,
@@ -1442,7 +1424,7 @@ export function useI18n() {
                 categories.push(submitCategory);
             }
 
-            allCategories[categoryType] = categories;
+            allCategories[`${categoryType}`] = categories;
         }
 
         return allCategories;
@@ -1455,9 +1437,7 @@ export function useI18n() {
             return availableExchangeRates;
         }
 
-        for (let i = 0; i < exchangeRatesData.exchangeRates.length; i++) {
-            const exchangeRate = exchangeRatesData.exchangeRates[i];
-
+        for (const exchangeRate of exchangeRatesData.exchangeRates) {
             availableExchangeRates.push({
                 currencyCode: exchangeRate.currency,
                 currencyDisplayName: getCurrencyName(exchangeRate.currency),
@@ -1494,16 +1474,13 @@ export function useI18n() {
     function getAllSupportedImportFileCagtegoryAndTypes(): LocalizedImportFileCategoryAndTypes[] {
         const allSupportedImportFileCategoryAndTypes: LocalizedImportFileCategoryAndTypes[] = [];
 
-        for (let i = 0; i < SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES.length; i++) {
-            const categoryAndTypes = SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES[i];
-
+        for (const categoryAndTypes of SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES) {
             const localizedCategoryAndTypes: LocalizedImportFileCategoryAndTypes = {
                 displayCategoryName: t(categoryAndTypes.categoryName),
                 fileTypes: []
             };
 
-            for (let j = 0; j < categoryAndTypes.fileTypes.length; j++) {
-                const fileType = categoryAndTypes.fileTypes[j];
+            for (const fileType of categoryAndTypes.fileTypes) {
                 let document: LocalizedImportFileDocument | undefined;
 
                 if (fileType.document) {
@@ -1517,7 +1494,7 @@ export function useI18n() {
                         if (SUPPORTED_DOCUMENT_LANGUAGES_FOR_IMPORT_FILE[documentLanguage] === documentLanguage) {
                             documentAnchor = t(`document.anchor.export_and_import.${fileType.document.anchor}`);
                         } else if (SUPPORTED_DOCUMENT_LANGUAGES_FOR_IMPORT_FILE[documentLanguage]) {
-                            documentLanguage = SUPPORTED_DOCUMENT_LANGUAGES_FOR_IMPORT_FILE[documentLanguage];
+                            documentLanguage = SUPPORTED_DOCUMENT_LANGUAGES_FOR_IMPORT_FILE[documentLanguage] as string;
                             documentAnchor = t(`document.anchor.export_and_import.${fileType.document.anchor}`, {}, { locale: documentLanguage });
                         } else {
                             documentLanguage = DEFAULT_DOCUMENT_LANGUAGE_FOR_IMPORT_FILE;
@@ -1528,8 +1505,8 @@ export function useI18n() {
                         documentAnchor = fileType.document.anchor;
                     }
 
-                    if (documentLanguage && documentLanguage !== getCurrentLanguageTag()) {
-                        documentDisplayLanguageName = getLanguageDisplayName(ALL_LANGUAGES[documentLanguage].name);
+                    if (documentLanguage && documentLanguage !== getCurrentLanguageTag() && ALL_LANGUAGES[documentLanguage]) {
+                        documentDisplayLanguageName = getLanguageDisplayName((ALL_LANGUAGES[documentLanguage] as LanguageInfo).name);
                     }
 
                     if (documentLanguage) {
@@ -1556,8 +1533,7 @@ export function useI18n() {
                 const subTypes: LocalizedImportFileTypeSubType[] = [];
 
                 if (fileType.subTypes) {
-                    for (let k = 0; k < fileType.subTypes.length; k++) {
-                        const subType = fileType.subTypes[k];
+                    for (const subType of fileType.subTypes) {
                         const localizedSubType: LocalizedImportFileTypeSubType = {
                             type: subType.type,
                             displayName: t(subType.name),
@@ -1571,8 +1547,7 @@ export function useI18n() {
                 const supportedEncodings: LocalizedImportFileTypeSupportedEncodings[] = [];
 
                 if (fileType.supportedEncodings) {
-                    for (let k = 0; k < fileType.supportedEncodings.length; k++) {
-                        const encoding = fileType.supportedEncodings[k];
+                    for (const encoding of fileType.supportedEncodings) {
                         const localizedEncoding: LocalizedImportFileTypeSupportedEncodings = {
                             encoding: encoding,
                             displayName: t(`encoding.${encoding}`)
@@ -1589,6 +1564,7 @@ export function useI18n() {
                     subTypes: subTypes.length ? subTypes : undefined,
                     supportedEncodings: supportedEncodings.length ? supportedEncodings : undefined,
                     dataFromTextbox: fileType.dataFromTextbox,
+                    supportedAdditionalOptions: fileType.supportedAdditionalOptions,
                     document: document
                 };
 
@@ -1631,6 +1607,14 @@ export function useI18n() {
         return t(`datetime.${weekDay.name}.long`);
     }
 
+    function getQuarterName(quarter: number): string {
+        if (1 <= quarter && quarter <= 4) {
+            return t('datetime.quarter.q' + quarter);
+        } else {
+            return '';
+        }
+    }
+
     function getMultiMonthdayShortNames(monthDays: number[]): string {
         if (!monthDays) {
             return '';
@@ -1638,7 +1622,7 @@ export function useI18n() {
 
         if (monthDays.length === 1) {
             return t('format.misc.monthDay', {
-                ordinal: getMonthdayOrdinal(monthDays[0])
+                ordinal: getMonthdayOrdinal(monthDays[0] as number)
             });
         } else {
             return t('format.misc.monthDays', {
@@ -1657,16 +1641,14 @@ export function useI18n() {
             firstDayOfWeek = WeekDay.DefaultFirstDay.type;
         }
 
-        for (let i = 0; i < weekdayTypes.length; i++) {
-            weekdayTypesMap[weekdayTypes[i]] = true;
+        for (const weekdayType of weekdayTypes) {
+            weekdayTypesMap[weekdayType] = true;
         }
 
         const allWeekDays = getAllWeekDays(firstDayOfWeek);
         const finalWeekdayNames = [];
 
-        for (let i = 0; i < allWeekDays.length; i++) {
-            const weekDay = allWeekDays[i];
-
+        for (const weekDay of allWeekDays) {
             if (weekdayTypesMap[weekDay.type]) {
                 finalWeekdayNames.push(weekDay.displayName);
             }
@@ -1680,109 +1662,109 @@ export function useI18n() {
         return numeralSystem.getAllDigits();
     }
 
-    function getCurrentCalendarDisplayType(): CalendarDisplayType {
-        let calendarDisplayType = CalendarDisplayType.valueOf(userStore.currentUserCalendarDisplayType);
+    function getLocaleDefaultCalendarDisplayType(): CalendarDisplayType {
+        const defaultCalendarDisplayTypeName = t('default.calendarDisplayType');
+        let calendarDisplayType = CalendarDisplayType.parse(defaultCalendarDisplayTypeName);
 
         if (!calendarDisplayType) {
-            const defaultCalendarDisplayTypeName = t('default.calendarDisplayType');
-            calendarDisplayType = CalendarDisplayType.parse(defaultCalendarDisplayTypeName);
-
-            if (!calendarDisplayType) {
-                calendarDisplayType = CalendarDisplayType.Default;
-            }
+            calendarDisplayType = CalendarDisplayType.Default;
         }
 
         return calendarDisplayType;
     }
 
-    function getCurrentDateDisplayType(): DateDisplayType {
-        let dateDisplayType = DateDisplayType.valueOf(userStore.currentUserDateDisplayType);
+    function getLocaleDefaultDateDisplayType(): DateDisplayType {
+        const defaultDateDisplayTypeName = t('default.dateDisplayType');
+        let dateDisplayType = DateDisplayType.parse(defaultDateDisplayTypeName);
 
         if (!dateDisplayType) {
-            const defaultDateDisplayTypeName = t('default.dateDisplayType');
-            dateDisplayType = DateDisplayType.parse(defaultDateDisplayTypeName);
-
-            if (!dateDisplayType) {
-                dateDisplayType = DateDisplayType.Default;
-            }
+            dateDisplayType = DateDisplayType.Default;
         }
 
         return dateDisplayType;
     }
 
-    function getCurrentNumeralSystemType(): NumeralSystem {
-        let numeralSystemType = NumeralSystem.valueOf(userStore.currentUserNumeralSystem);
+    function getLocaleDefaultNumeralSystemType(): NumeralSystem {
+        const defaultNumeralSystemTypeName = t('default.numeralSystem');
+        let numeralSystemType = NumeralSystem.parse(defaultNumeralSystemTypeName);
 
         if (!numeralSystemType) {
-            const defaultNumeralSystemTypeName = t('default.numeralSystem');
-            numeralSystemType = NumeralSystem.parse(defaultNumeralSystemTypeName);
-
-            if (!numeralSystemType) {
-                numeralSystemType = NumeralSystem.Default;
-            }
+            numeralSystemType = NumeralSystem.Default;
         }
 
         return numeralSystemType;
     }
 
-    function getCurrentDecimalSeparator(): string {
-        let decimalSeparatorType = DecimalSeparator.valueOf(userStore.currentUserDecimalSeparator);
+    function getLocaleDefaultDecimalSeparator(): DecimalSeparator {
+        const defaultDecimalSeparatorTypeName = t('default.decimalSeparator');
+        let decimalSeparatorType = DecimalSeparator.parse(defaultDecimalSeparatorTypeName);
 
         if (!decimalSeparatorType) {
-            const defaultDecimalSeparatorTypeName = t('default.decimalSeparator');
-            decimalSeparatorType = DecimalSeparator.parse(defaultDecimalSeparatorTypeName);
-
-            if (!decimalSeparatorType) {
-                decimalSeparatorType = DecimalSeparator.Default;
-            }
+            decimalSeparatorType = DecimalSeparator.Default;
         }
 
-        return decimalSeparatorType.symbol;
+        return decimalSeparatorType;
     }
 
-    function getCurrentDigitGroupingSymbol(): string {
-        let digitGroupingSymbolType = DigitGroupingSymbol.valueOf(userStore.currentUserDigitGroupingSymbol);
+    function getLocaleDefaultDigitGroupingSymbol(): DigitGroupingSymbol {
+        const defaultDigitGroupingSymbolTypeName = t('default.digitGroupingSymbol');
+        let digitGroupingSymbolType = DigitGroupingSymbol.parse(defaultDigitGroupingSymbolTypeName);
 
         if (!digitGroupingSymbolType) {
-            const defaultDigitGroupingSymbolTypeName = t('default.digitGroupingSymbol');
-            digitGroupingSymbolType = DigitGroupingSymbol.parse(defaultDigitGroupingSymbolTypeName);
-
-            if (!digitGroupingSymbolType) {
-                digitGroupingSymbolType = DigitGroupingSymbol.Default;
-            }
+            digitGroupingSymbolType = DigitGroupingSymbol.Default;
         }
 
-        return digitGroupingSymbolType.symbol;
+        return digitGroupingSymbolType;
     }
 
-    function getCurrentDigitGroupingType(): DigitGroupingType {
-        let digitGroupingType = DigitGroupingType.valueOf(userStore.currentUserDigitGrouping);
+    function getLocaleDefaultDigitGroupingType(): DigitGroupingType {
+        const defaultDigitGroupingTypeName = t('default.digitGrouping');
+        let digitGroupingType = DigitGroupingType.parse(defaultDigitGroupingTypeName);
 
         if (!digitGroupingType) {
-            const defaultDigitGroupingTypeName = t('default.digitGrouping');
-            digitGroupingType = DigitGroupingType.parse(defaultDigitGroupingTypeName);
-
-            if (!digitGroupingType) {
-                digitGroupingType = DigitGroupingType.Default;
-            }
+            digitGroupingType = DigitGroupingType.Default;
         }
 
         return digitGroupingType;
     }
 
-    function getCurrentFiscalYearFormatType(): number {
-        let fiscalYearFormat = FiscalYearFormat.valueOf(userStore.currentUserFiscalYearFormat);
+    function getLocaleFiscalYearFormatType(): FiscalYearFormat {
+        const defaultFiscalYearFormatTypeName = t('default.fiscalYearFormat');
+        let fiscalYearFormat = FiscalYearFormat.parse(defaultFiscalYearFormatTypeName);
 
         if (!fiscalYearFormat) {
-            const defaultFiscalYearFormatTypeName = t('default.fiscalYearFormat');
-            fiscalYearFormat = FiscalYearFormat.parse(defaultFiscalYearFormatTypeName);
-
-            if (!fiscalYearFormat) {
-                fiscalYearFormat = FiscalYearFormat.Default;
-            }
+            fiscalYearFormat = FiscalYearFormat.Default;
         }
 
-        return fiscalYearFormat.type;
+        return fiscalYearFormat;
+    }
+
+    function getCurrentCalendarDisplayType(): CalendarDisplayType {
+        return CalendarDisplayType.valueOf(userStore.currentUserCalendarDisplayType) ?? getLocaleDefaultCalendarDisplayType();
+    }
+
+    function getCurrentDateDisplayType(): DateDisplayType {
+        return DateDisplayType.valueOf(userStore.currentUserDateDisplayType) ?? getLocaleDefaultDateDisplayType();
+    }
+
+    function getCurrentNumeralSystemType(): NumeralSystem {
+        return NumeralSystem.valueOf(userStore.currentUserNumeralSystem) ?? getLocaleDefaultNumeralSystemType();
+    }
+
+    function getCurrentDecimalSeparator(): string {
+        return DecimalSeparator.valueOf(userStore.currentUserDecimalSeparator)?.symbol ?? getLocaleDefaultDecimalSeparator().symbol;
+    }
+
+    function getCurrentDigitGroupingSymbol(): string {
+        return DigitGroupingSymbol.valueOf(userStore.currentUserDigitGroupingSymbol)?.symbol ?? getLocaleDefaultDigitGroupingSymbol().symbol;
+    }
+
+    function getCurrentDigitGroupingType(): DigitGroupingType {
+        return DigitGroupingType.valueOf(userStore.currentUserDigitGrouping) ?? getLocaleDefaultDigitGroupingType();
+    }
+
+    function getCurrentFiscalYearFormatType(): number {
+        return FiscalYearFormat.valueOf(userStore.currentUserFiscalYearFormat)?.type ?? getLocaleFiscalYearFormatType().type;
     }
 
     function getCurrencyName(currencyCode: string): string {
@@ -1793,12 +1775,22 @@ export function useI18n() {
         return t(`currency.name.${currencyCode}`);
     }
 
+    function getLongDateFormatOrder(): DateFormatOrder {
+        return getLocalizedDateTimeType(LongDateFormat.all(), LongDateFormat.values(), userStore.currentUserLongDateFormat, 'longDateFormat', LongDateFormat.Default).order;
+    }
+
+    function getShortDateFormatOrder(): DateFormatOrder {
+        return getLocalizedDateTimeType(ShortDateFormat.all(), ShortDateFormat.values(), userStore.currentUserShortDateFormat, 'shortDateFormat', ShortDateFormat.Default).order;
+    }
+
     function isLongDateMonthAfterYear(): boolean {
-        return getLocalizedDateTimeType(LongDateFormat.all(), LongDateFormat.values(), userStore.currentUserLongDateFormat, 'longDateFormat', LongDateFormat.Default).isMonthAfterYear;
+        const order: DateFormatOrder = getLongDateFormatOrder();
+        return order === DateFormatOrder.YMD;
     }
 
     function isShortDateMonthAfterYear(): boolean {
-        return getLocalizedDateTimeType(ShortDateFormat.all(), ShortDateFormat.values(), userStore.currentUserShortDateFormat, 'shortDateFormat', ShortDateFormat.Default).isMonthAfterYear;
+        const order: DateFormatOrder = getShortDateFormatOrder();
+        return order === DateFormatOrder.YMD;
     }
 
     function isLongTime24HourFormat(): boolean {
@@ -1830,17 +1822,16 @@ export function useI18n() {
         return getLocalizedLongTimeFormat().indexOf('ss') >= 0;
     }
 
-    function formatGregorianTextualMonthDayToGregorianLikeLongMonthDay(monthDay: TextualMonthDay): string {
+    function formatGregorianTextualMonthDayToGregorianLikeLongMonthDay(monthDay: TextualMonthDay, numeralSystem?: NumeralSystem): string {
         const gregorianLikeCalendarType = getGregorianLikeCalendarType();
-        return formatGregorianCalendarMonthDashDay(monthDay, getLocalizedLongMonthDayFormat(), getDateTimeFormatOptions({ calendarType: gregorianLikeCalendarType }));
+        return formatGregorianCalendarMonthDashDay(monthDay, getLocalizedLongMonthDayFormat(), getDateTimeFormatOptions({ calendarType: gregorianLikeCalendarType, numeralSystem: numeralSystem }));
     }
 
-    function formatUnixTimeToGregorianLikeYearQuarter(unixTime: number): string {
+    function formatDateTimeToGregorianLikeYearQuarter(dateTime: DateTime): string {
         const gregorianLikeCalendarType = getGregorianLikeCalendarType();
         const dateTimeFormatOptions = getDateTimeFormatOptions({ calendarType: gregorianLikeCalendarType });
-        const date = parseDateTimeFromUnixTime(unixTime);
-        const year = date.getLocalizedCalendarYear(dateTimeFormatOptions);
-        const quarter = date.getLocalizedCalendarQuarter(dateTimeFormatOptions);
+        const year = formatDateTime(dateTime, getLocalizedShortYearFormat(), dateTimeFormatOptions);
+        const quarter = dateTime.getLocalizedCalendarQuarter(dateTimeFormatOptions);
         return formatYearQuarter(year, quarter);
     }
 
@@ -1874,14 +1865,14 @@ export function useI18n() {
         return formatTimeRangeToGregorianLikeFiscalYearFormat(fiscalYearFormat, timeRange);
     }
 
-    function formatFiscalYearStartToGregorianLikeLongMonth(fiscalYearStartValue: number) {
+    function formatFiscalYearStartToGregorianLikeLongMonth(fiscalYearStartValue: number, numeralSystem?: NumeralSystem): string {
         let fiscalYearStart = FiscalYearStart.valueOf(fiscalYearStartValue);
 
         if (!fiscalYearStart) {
             fiscalYearStart = FiscalYearStart.Default;
         }
 
-        return formatGregorianTextualMonthDayToGregorianLikeLongMonthDay(fiscalYearStart.toMonthDashDayString());
+        return formatGregorianTextualMonthDayToGregorianLikeLongMonthDay(fiscalYearStart.toMonthDashDayString(), numeralSystem);
     }
 
     function formatDateRange(dateType: number, startTime: number, endTime: number): string {
@@ -1894,9 +1885,7 @@ export function useI18n() {
         const dateTimeFormatOptions = getDateTimeFormatOptions();
         const gregorianLikeDateTimeFormatOptions = getDateTimeFormatOptions({ calendarType: gregorianLikeCalendarType });
 
-        for (let i = 0; i < allDateRanges.length; i++) {
-            const dateRange = allDateRanges[i];
-
+        for (const dateRange of allDateRanges) {
             if (dateRange && dateRange.type !== DateRange.Custom.type && dateRange.type === dateType && dateRange.name) {
                 return t(dateRange.name);
             }
@@ -1935,9 +1924,9 @@ export function useI18n() {
         return `${displayStartTime} ~ ${displayEndTime}`;
     }
 
-    function getTimezoneDifferenceDisplayText(utcOffset: number): string {
+    function getTimezoneDifferenceDisplayText(unixTime: number, utcOffset: number): string {
         const numeralSystem = getCurrentNumeralSystemType();
-        const defaultTimezoneOffset = getTimezoneOffsetMinutes();
+        const defaultTimezoneOffset = getTimezoneOffsetMinutes(unixTime);
         const offsetTime = getTimeDifferenceHoursAndMinutes(utcOffset - defaultTimezoneOffset);
 
         if (utcOffset > defaultTimezoneOffset) {
@@ -1974,6 +1963,8 @@ export function useI18n() {
             return undefined;
         }
 
+        const dateTimeFormatOptions = getDateTimeFormatOptions({ calendarType: calendarDisplayType });
+
         if (calendarDisplayType === CalendarType.Chinese) {
             const chineseCalendarLocaleData = getChineseCalendarLocaleData();
             const chineseDates: ChineseYearMonthDayInfo[] | undefined = getChineseYearMonthAllDayInfos(yearMonth, chineseCalendarLocaleData);
@@ -1984,15 +1975,13 @@ export function useI18n() {
 
             const ret: CalendarAlternateDate[] = [];
 
-            for (let i = 0; i < chineseDates.length; i++) {
-                const chineseDate = chineseDates[i];
+            for (const chineseDate of chineseDates) {
                 const alternateDate = getChineseCalendarAlternateDisplayDate(chineseDate);
                 ret.push(alternateDate);
             }
 
             return ret;
         } else if (calendarDisplayType === CalendarType.Persian) {
-            const dateTimeFormatOptions = getDateTimeFormatOptions();
             const monthDays: number = getGregorianCalendarYearMonthDays(yearMonth);
             const ret: CalendarAlternateDate[] = [];
 
@@ -2014,6 +2003,8 @@ export function useI18n() {
             return undefined;
         }
 
+        const dateTimeFormatOptions = getDateTimeFormatOptions({ calendarType: calendarDisplayType });
+
         if (calendarDisplayType === CalendarType.Chinese) {
             const chineseCalendarLocaleData = getChineseCalendarLocaleData();
             const chineseDate: ChineseYearMonthDayInfo | undefined = getChineseYearMonthDayInfo(yearMonthDay, chineseCalendarLocaleData);
@@ -2024,7 +2015,6 @@ export function useI18n() {
 
             return getChineseCalendarAlternateDisplayDate(chineseDate);
         } else if (calendarDisplayType === CalendarType.Persian) {
-            const dateTimeFormatOptions = getDateTimeFormatOptions();
             const dateTime = getYearMonthDayDateTime(yearMonthDay.year, yearMonthDay.month, yearMonthDay.day);
             return getCalendarAlternateDisplayDate(dateTime, dateTimeFormatOptions);
         }
@@ -2112,16 +2102,39 @@ export function useI18n() {
         return formatPercent(value, precision, lowPrecisionValue, numberFormatOptions);
     }
 
+    function getFormattedVolume(value: number, precision?: number, unit?: 'KiB' | 'MiB'): string {
+        const numberFormatOptions = getNumberFormatOptions({});
+        let displayUnit = unit || 'B';
+
+        if (unit === 'KiB') {
+            value = value / 1024.0;
+        } else if (unit === 'MiB') {
+            value = value / 1024.0 / 1024.0;
+        } else {
+            displayUnit = 'B';
+
+            if (value >= 1024.0) {
+                value = value / 1024.0;
+                displayUnit = 'KiB';
+            }
+
+            if (value >= 1024.0) {
+                value = value / 1024.0;
+                displayUnit = 'MiB';
+            }
+        }
+
+        return formatNumber(value, numberFormatOptions, precision) + ' ' + displayUnit;
+    }
+
     function getFormattedExchangeRateAmount(value: number, numeralSystem?: NumeralSystem): string {
         const numberFormatOptions = getNumberFormatOptions({ numeralSystem });
         return formatExchangeRateAmount(value, numberFormatOptions);
     }
 
-    function getAdaptiveAmountRate(amount1: number, amount2: number, fromExchangeRate: {
-        rate: string
-    }, toExchangeRate: { rate: string }): string | null {
+    function getAdaptiveAmountRate(amount1: number, amount2: number, fromExchangeRate?: { rate: string }, toExchangeRate?: { rate: string }): string | null {
         const numberFormatOptions = getNumberFormatOptions({});
-        return getAdaptiveDisplayAmountRate(amount1, amount2, fromExchangeRate, toExchangeRate, numberFormatOptions);
+        return getAdaptiveDisplayAmountRate(amount1, amount2, numberFormatOptions, fromExchangeRate, toExchangeRate);
     }
 
     function getAmountPrependAndAppendText(currencyCode: string, isPlural: boolean): CurrencyPrependAndAppendText | null {
@@ -2131,25 +2144,23 @@ export function useI18n() {
         return getAmountPrependAndAppendCurrencySymbol(currencyDisplayType, currencyCode, currencyUnit, currencyName, isPlural);
     }
 
-    function getCategorizedAccountsWithDisplayBalance(allVisibleAccounts: Account[], showAccountBalance: boolean): CategorizedAccountWithDisplayBalance[] {
+    function getCategorizedAccountsWithDisplayBalance(allVisibleAccounts: Account[], showAccountBalance: boolean, customAccountCategoryOrder: string): CategorizedAccountWithDisplayBalance[] {
         const ret: CategorizedAccountWithDisplayBalance[] = [];
         const defaultCurrency = userStore.currentUserDefaultCurrency;
-        const allCategories = AccountCategory.values();
+        const allCategories = AccountCategory.values(customAccountCategoryOrder);
         const categorizedAccounts: Record<number, CategorizedAccount> = getCategorizedAccountsMap(Account.cloneAccounts(allVisibleAccounts));
 
-        for (let i = 0; i < allCategories.length; i++) {
-            const category = allCategories[i];
+        for (const category of allCategories) {
+            const accountCategory = categorizedAccounts[category.type];
 
-            if (!categorizedAccounts[category.type]) {
+            if (!accountCategory) {
                 continue;
             }
 
-            const accountCategory = categorizedAccounts[category.type];
             const accountsWithDisplayBalance: AccountWithDisplayBalance[] = [];
 
             if (accountCategory.accounts) {
-                for (let i = 0; i < accountCategory.accounts.length; i++) {
-                    const account = accountCategory.accounts[i];
+                for (const account of accountCategory.accounts) {
                     let accountWithDisplaceBalance: AccountWithDisplayBalance;
 
                     if (showAccountBalance && account.isAsset) {
@@ -2167,28 +2178,29 @@ export function useI18n() {
             let finalTotalBalance = '';
 
             if (showAccountBalance) {
-                const accountsBalance = getAllFilteredAccountsBalance(categorizedAccounts, account => account.category === accountCategory.category);
+                const accountsBalance = getAllFilteredAccountsBalance(categorizedAccounts, customAccountCategoryOrder,
+                        account => account.category === accountCategory.category);
                 let totalBalance = 0;
                 let hasUnCalculatedAmount = false;
 
-                for (let i = 0; i < accountsBalance.length; i++) {
-                    if (accountsBalance[i].currency === defaultCurrency) {
-                        if (accountsBalance[i].isAsset) {
-                            totalBalance += accountsBalance[i].balance;
-                        } else if (accountsBalance[i].isLiability) {
-                            totalBalance -= accountsBalance[i].balance;
+                for (const accountBalance of accountsBalance) {
+                    if (accountBalance.currency === defaultCurrency) {
+                        if (accountBalance.isAsset) {
+                            totalBalance += accountBalance.balance;
+                        } else if (accountBalance.isLiability) {
+                            totalBalance -= accountBalance.balance;
                         }
                     } else {
-                        const balance = exchangeRatesStore.getExchangedAmount(accountsBalance[i].balance, accountsBalance[i].currency, defaultCurrency);
+                        const balance = exchangeRatesStore.getExchangedAmount(accountBalance.balance, accountBalance.currency, defaultCurrency);
 
                         if (!isNumber(balance)) {
                             hasUnCalculatedAmount = true;
                             continue;
                         }
 
-                        if (accountsBalance[i].isAsset) {
+                        if (accountBalance.isAsset) {
                             totalBalance += Math.trunc(balance);
-                        } else if (accountsBalance[i].isLiability) {
+                        } else if (accountBalance.isLiability) {
                             totalBalance -= Math.trunc(balance);
                         }
                     }
@@ -2208,6 +2220,50 @@ export function useI18n() {
         }
 
         return ret;
+    }
+
+    function getLocalizedFileEncodingName(encoding: string): string {
+        return t(`encoding.${encoding}`);
+    }
+
+    function getLocalizedOAuth2ProviderName(oauth2Provider: string, oidcDisplayNames: Record<string, string>): string {
+        if (oauth2Provider === 'oidc') {
+            const providerDisplayName = getServerMultiLanguageConfigContent(oidcDisplayNames);
+
+            if (providerDisplayName) {
+                return providerDisplayName;
+            } else {
+                return 'Connect ID';
+            }
+        } else {
+            const providerDisplayName = OAUTH2_PROVIDER_DISPLAY_NAME[oauth2Provider];
+
+            if (providerDisplayName) {
+                return providerDisplayName;
+            } else {
+                return 'OAuth 2.0';
+            }
+        }
+    }
+
+    function getLocalizedOAuth2LoginText(oauth2Provider: string, oidcDisplayNames: Record<string, string>): string {
+        if (oauth2Provider === 'oidc') {
+            const providerDisplayName = getServerMultiLanguageConfigContent(oidcDisplayNames);
+
+            if (providerDisplayName) {
+                return t('format.misc.loginWithCustomProvider', { name: providerDisplayName });
+            } else {
+                return t('Log in with Connect ID');
+            }
+        } else {
+            const providerDisplayName = OAUTH2_PROVIDER_DISPLAY_NAME[oauth2Provider];
+
+            if (providerDisplayName) {
+                return t('format.misc.loginWithCustomProvider', { name: providerDisplayName });
+            } else {
+                return t('Log in with OAuth 2.0');
+            }
+        }
     }
 
     function setLanguage(languageKey: string | null, force?: boolean): LocaleDefaultSettings | null {
@@ -2291,19 +2347,11 @@ export function useI18n() {
     }
 
     function setTimeZone(timezone: string): void {
-        let timezoneOffsetMinutes = getBrowserTimezoneOffsetMinutes();
-
         if (timezone) {
-            timezoneOffsetMinutes = getTimezoneOffsetMinutes(timezone);
+            moment.tz.setDefault(timezone);
+        } else {
+            moment.tz.setDefault();
         }
-
-        moment.tz.add(moment.tz.pack({
-            name: 'Fixed/Timezone',
-            abbrs: ['FIX'],
-            offsets: [-timezoneOffsetMinutes],
-            untils: [0]
-        }));
-        moment.tz.setDefault('Fixed/Timezone');
     }
 
     function initLocale(lastUserLanguage?: string, timezone?: string): LocaleDefaultSettings | null {
@@ -2324,7 +2372,7 @@ export function useI18n() {
             logger.info(`Current timezone is ${timezone}`);
             setTimeZone(timezone);
         } else {
-            logger.info(`No timezone is set, use browser default ${getTimezoneOffset()} (maybe ${moment.tz.guess(true)})`);
+            logger.info(`No timezone is set, use browser default ${getTimezoneOffset(getCurrentUnixTime())} (${getBrowserTimezoneName()})`);
             setTimeZone('');
         }
 
@@ -2337,7 +2385,7 @@ export function useI18n() {
         ti: translateIf,
         te: translateError,
         joinMultiText,
-        getServerTipContent,
+        getServerMultiLanguageConfigContent,
         // get current language info
         getCurrentLanguageTag,
         getCurrentLanguageInfo,
@@ -2379,20 +2427,26 @@ export function useI18n() {
         getAllIncomeAmountColors: () => getAllExpenseIncomeAmountColors(CategoryType.Income),
         getAllAccountCategories,
         getAllAccountTypes: () => getLocalizedDisplayNameAndType(AccountType.values()),
-        getAllCategoricalChartTypes: () => getLocalizedDisplayNameAndType(CategoricalChartType.values()),
+        getAllCategoricalChartTypes: (withDesktopOnlyChart?: boolean) => getLocalizedDisplayNameAndType(CategoricalChartType.values(!!withDesktopOnlyChart)),
         getAllTrendChartTypes: () => getLocalizedDisplayNameAndType(TrendChartType.values()),
         getAllAccountBalanceTrendChartTypes: () => getLocalizedDisplayNameAndType(AccountBalanceTrendChartType.values()),
-        getAllStatisticsChartDataTypes: (analysisType: StatisticsAnalysisType) => getLocalizedDisplayNameAndType(ChartDataType.values(analysisType)),
-        getAllStatisticsSortingTypes: () => getLocalizedDisplayNameAndType(ChartSortingType.values()),
-        getAllStatisticsDateAggregationTypes: () => getLocalizedChartDateAggregationTypeAndDisplayName(true),
-        getAllStatisticsDateAggregationTypesWithShortName: () => getLocalizedChartDateAggregationTypeAndDisplayName(false),
+        getAllStatisticsChartDataTypes: (analysisType: StatisticsAnalysisType, withDesktopOnlyChart?: boolean) => getLocalizedDisplayNameAndType(ChartDataType.values(analysisType, withDesktopOnlyChart)),
+        getAllStatisticsSortingTypes: (useAlternativeName?: boolean) => getLocalizedDisplayNameAndType(ChartSortingType.values(), useAlternativeName),
+        getAllStatisticsDateAggregationTypes: (analysisType: StatisticsAnalysisType) => getLocalizedChartDateAggregationTypeAndDisplayName(analysisType, true),
+        getAllStatisticsDateAggregationTypesWithShortName: (analysisType: StatisticsAnalysisType) => getLocalizedChartDateAggregationTypeAndDisplayName(analysisType, false),
         getAllTransactionEditScopeTypes: () => getLocalizedDisplayNameAndType(TransactionEditScopeType.values()),
-        getAllTransactionTagFilterTypes: () => getLocalizedDisplayNameAndType(TransactionTagFilterType.values()),
+        getAllTransactionQuickSaveButtonStyles: () => getLocalizedDisplayNameAndType(TransactionQuickSaveButtonStyle.values()),
+        getAllTransactionQuickAddButtonActionTypes: () => getLocalizedDisplayNameAndType(TransactionQuickAddButtonActionType.values()),
         getAllTransactionScheduledFrequencyTypes: () => getLocalizedDisplayNameAndType(ScheduledTemplateFrequencyType.values()),
         getAllImportTransactionColumnTypes: () => getLocalizedDisplayNameAndType(ImportTransactionColumnType.values()),
         getAllTransactionDefaultCategories,
         getAllDisplayExchangeRates,
         getAllSupportedImportFileCagtegoryAndTypes,
+        getAllTransactionExplorerConditionFields: () => getLocalizedNameValue(TransactionExplorerConditionField.values()),
+        getAllTransactionExplorerConditionOperators: (operators?: TransactionExplorerConditionOperator[]) => getLocalizedNameValue(operators ?? TransactionExplorerConditionOperator.values()),
+        getAllTransactionExplorerDataDimensions: (operators?: TransactionExplorerDataDimension[]) => getLocalizedNameValue(operators ?? TransactionExplorerDataDimension.values()),
+        getAllTransactionExplorerValueMetrics: (operators?: TransactionExplorerValueMetric[]) => getLocalizedNameValue(operators ?? TransactionExplorerValueMetric.values()),
+        getAllTransactionExplorerChartTypes: (operators?: TransactionExplorerChartType[]) => getLocalizedNameValue(operators ?? TransactionExplorerChartType.values()),
         // get localized info
         getLanguageInfo,
         getMonthShortName,
@@ -2401,9 +2455,17 @@ export function useI18n() {
         getMonthdayShortName,
         getWeekdayShortName,
         getWeekdayLongName,
+        getQuarterName,
         getMultiMonthdayShortNames,
         getMultiWeekdayLongNames,
         getAllLocalizedDigits,
+        getLocaleDefaultCalendarDisplayType,
+        getLocaleDefaultDateDisplayType,
+        getLocaleDefaultNumeralSystemType,
+        getLocaleDefaultDecimalSeparator,
+        getLocaleDefaultDigitGroupingSymbol,
+        getLocaleDefaultDigitGroupingType,
+        getLocaleFiscalYearFormatType,
         getCurrentCalendarDisplayType,
         getCurrentDateDisplayType,
         getCurrentNumeralSystemType,
@@ -2412,6 +2474,8 @@ export function useI18n() {
         getCurrentDigitGroupingType,
         getCurrentFiscalYearFormatType,
         getCurrencyName,
+        getLongDateFormatOrder,
+        getShortDateFormatOrder,
         isLongDateMonthAfterYear,
         isShortDateMonthAfterYear,
         isLongTime24HourFormat,
@@ -2422,34 +2486,36 @@ export function useI18n() {
         isLongTimeMinuteTwoDigits,
         isLongTimeSecondTwoDigits,
         // format date time (by calendar display type) functions
-        getCalendarDisplayShortYearFromUnixTime: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedShortYearFormat(), getDateTimeFormatOptions({ calendarType: getCurrentCalendarDisplayType().primaryCalendarType }), utcOffset, currentUtcOffset),
-        getCalendarDisplayShortMonthFromUnixTime: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, 'MMM', getDateTimeFormatOptions({ calendarType: getCurrentCalendarDisplayType().primaryCalendarType }), utcOffset, currentUtcOffset),
-        getCalendarDisplayDayOfMonthFromUnixTime: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedShortDayFormat(), getDateTimeFormatOptions({ calendarType: getCurrentCalendarDisplayType().primaryCalendarType }), utcOffset, currentUtcOffset),
+        getCalendarDisplayShortYearFromDateTime: (dateTime: DateTime, numeralSystem?: NumeralSystem) => formatDateTime(dateTime, getLocalizedShortYearFormat(), getDateTimeFormatOptions({ calendarType: getCurrentCalendarDisplayType().primaryCalendarType, numeralSystem: numeralSystem })),
+        getCalendarDisplayShortMonthFromDateTime: (dateTime: DateTime, numeralSystem?: NumeralSystem) => formatDateTime(dateTime, 'MMM', getDateTimeFormatOptions({ calendarType: getCurrentCalendarDisplayType().primaryCalendarType, numeralSystem: numeralSystem })),
+        getCalendarDisplayDayOfMonthFromDateTime: (dateTime: DateTime, numeralSystem?: NumeralSystem) => formatDateTime(dateTime, getLocalizedShortDayFormat(), getDateTimeFormatOptions({ calendarType: getCurrentCalendarDisplayType().primaryCalendarType, numeralSystem: numeralSystem })),
         // format date time (by date display type) functions
-        formatUnixTimeToLongDateTime: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedLongDateFormat() + ' ' + getLocalizedLongTimeFormat(), getDateTimeFormatOptions(), utcOffset, currentUtcOffset),
-        formatUnixTimeToShortDateTime: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedShortDateFormat() + ' ' + getLocalizedShortTimeFormat(), getDateTimeFormatOptions(), utcOffset, currentUtcOffset),
-        formatUnixTimeToLongDate: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedLongDateFormat(), getDateTimeFormatOptions(), utcOffset, currentUtcOffset),
-        formatUnixTimeToShortDate: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedShortDateFormat(), getDateTimeFormatOptions(), utcOffset, currentUtcOffset),
-        formatUnixTimeToLongMonthDay: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedLongMonthDayFormat(), getDateTimeFormatOptions(), utcOffset, currentUtcOffset),
-        formatUnixTimeToShortMonthDay: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedShortMonthDayFormat(), getDateTimeFormatOptions(), utcOffset, currentUtcOffset),
-        formatUnixTimeToLongTime: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedLongTimeFormat(), getDateTimeFormatOptions(), utcOffset, currentUtcOffset),
-        formatUnixTimeToShortTime: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedShortTimeFormat(), getDateTimeFormatOptions(), utcOffset, currentUtcOffset),
+        parseDateTimeFromLongDateTime: (dateTime: string) => parseDateTimeFromString(dateTime, getLocalizedLongDateFormat() + ' ' + getLocalizedLongTimeFormat()),
+        parseDateTimeFromShortDateTime: (dateTime: string) => parseDateTimeFromString(dateTime, getLocalizedShortDateFormat() + ' ' + getLocalizedShortTimeFormat()),
+        formatDateTimeToLongDateTime: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedLongDateFormat() + ' ' + getLocalizedLongTimeFormat(), getDateTimeFormatOptions()),
+        formatDateTimeToShortDateTime: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedShortDateFormat() + ' ' + getLocalizedShortTimeFormat(), getDateTimeFormatOptions()),
+        formatDateTimeToLongDate: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedLongDateFormat(), getDateTimeFormatOptions()),
+        formatDateTimeToShortDate: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedShortDateFormat(), getDateTimeFormatOptions()),
+        formatDateTimeToLongMonthDay: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedLongMonthDayFormat(), getDateTimeFormatOptions()),
+        formatDateTimeToShortMonthDay: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedShortMonthDayFormat(), getDateTimeFormatOptions()),
+        formatDateTimeToLongTime: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedLongTimeFormat(), getDateTimeFormatOptions()),
+        formatDateTimeToShortTime: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedShortTimeFormat(), getDateTimeFormatOptions()),
         formatGregorianTextualYearMonthDayToLongDate: (date: TextualYearMonthDay) => formatGregorianCalendarYearDashMonthDashDay(date, getLocalizedLongDateFormat(), getDateTimeFormatOptions()),
         // format date time (Gregorian calendar and Gregorian-like calendar) functions
-        formatUnixTimeToGregorianLikeLongYear: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedLongYearFormat(), getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() }), utcOffset, currentUtcOffset),
-        formatUnixTimeToGregorianLikeShortYear: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedShortYearFormat(), getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() }), utcOffset, currentUtcOffset),
-        formatUnixTimeToGregorianLikeLongYearMonth: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedLongYearMonthFormat(), getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() }), utcOffset, currentUtcOffset),
-        formatUnixTimeToGregorianLikeShortYearMonth: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, getLocalizedShortYearMonthFormat(), getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() }), utcOffset, currentUtcOffset),
-        formatUnixTimeToGregorianLikeLongMonth: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, 'MMMM', getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() }), utcOffset, currentUtcOffset),
-        formatUnixTimeToGregorianLikeShortMonth: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, 'MMM', getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() }), utcOffset, currentUtcOffset),
+        formatDateTimeToGregorianLikeLongYear: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedLongYearFormat(), getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() })),
+        formatDateTimeToGregorianLikeShortYear: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedShortYearFormat(), getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() })),
+        formatDateTimeToGregorianLikeLongYearMonth: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedLongYearMonthFormat(), getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() })),
+        formatDateTimeToGregorianLikeShortYearMonth: (dateTime: DateTime) => formatDateTime(dateTime, getLocalizedShortYearMonthFormat(), getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() })),
+        formatDateTimeToGregorianLikeLongMonth: (dateTime: DateTime) => formatDateTime(dateTime, 'MMMM', getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() })),
+        formatDateTimeToGregorianLikeShortMonth: (dateTime: DateTime) => formatDateTime(dateTime, 'MMM', getDateTimeFormatOptions({ calendarType: getGregorianLikeCalendarType() })),
         formatGregorianTextualMonthDayToGregorianLikeLongMonthDay,
-        formatUnixTimeToGregorianLikeYearQuarter,
+        formatDateTimeToGregorianLikeYearQuarter,
         formatYearQuarterToGregorianLikeYearQuarter,
-        formatUnixTimeToGregorianLikeFiscalYear,
+        formatDateTimeToGregorianLikeFiscalYear: (dateTime: DateTime) => formatUnixTimeToGregorianLikeFiscalYear(dateTime.getUnixTime()),
         formatGregorianYearToGregorianLikeFiscalYear,
         formatFiscalYearStartToGregorianLikeLongMonth,
         // format date time (Gregorian calendar) functions
-        formatUnixTimeToGregorianDefaultDateTime: (unixTime: number, utcOffset?: number, currentUtcOffset?: number) => formatUnixTime(unixTime, KnownDateTimeFormat.DefaultDateTime.format, getDateTimeFormatOptions({ numeralSystem: NumeralSystem.WesternArabicNumerals, calendarType: CalendarType.Gregorian }), utcOffset, currentUtcOffset),
+        formatDateTimeToGregorianDefaultDateTime: (dateTime: DateTime) => formatDateTime(dateTime, KnownDateTimeFormat.DefaultDateTime.format, getDateTimeFormatOptions({ numeralSystem: NumeralSystem.WesternArabicNumerals, calendarType: CalendarType.Gregorian })),
         // other format date time functions
         formatDateRange,
         getTimezoneDifferenceDisplayText,
@@ -2468,11 +2534,16 @@ export function useI18n() {
         formatNumberToWesternArabicNumerals: (value: number, precision?: number) => getFormattedNumber(value, NumeralSystem.WesternArabicNumerals, precision),
         formatPercentToLocalizedNumerals: (value: number, precision: number, lowPrecisionValue: string) => getFormattedPercentValue(value, precision, lowPrecisionValue),
         formatPercentToWesternArabicNumerals: (value: number, precision: number, lowPrecisionValue: string) => getFormattedPercentValue(value, precision, lowPrecisionValue, NumeralSystem.WesternArabicNumerals),
+        formatVolumeToLocalizedNumerals: getFormattedVolume,
         formatExchangeRateAmountToWesternArabicNumerals: (value: number) => getFormattedExchangeRateAmount(value, NumeralSystem.WesternArabicNumerals),
         appendDigitGroupingSymbolAndDecimalSeparator: (value: string) => appendDigitGroupingSymbolAndDecimalSeparator(value, getNumberFormatOptions({})),
         getAdaptiveAmountRate,
         getAmountPrependAndAppendText,
         getCategorizedAccountsWithDisplayBalance,
+        // other format functions
+        getLocalizedFileEncodingName,
+        getLocalizedOAuth2ProviderName,
+        getLocalizedOAuth2LoginText,
         // localization setting functions
         setLanguage,
         setTimeZone,

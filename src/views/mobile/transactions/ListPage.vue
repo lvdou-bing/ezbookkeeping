@@ -1,43 +1,46 @@
 <template>
-    <f7-page with-subnavbar
-             ptr
+    <f7-page ptr
              infinite
              :infinite-preloader="loadingMore"
              :infinite-distance="600"
+             :with-subnavbar="showSearchbar"
              @ptr:refresh="reload"
              @page:afterin="onPageAfterIn"
              @infinite="loadMore(true)">
         <f7-navbar>
-            <f7-nav-left :back-link="tt('Back')"></f7-nav-left>
+            <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
             <f7-nav-title>
-                <f7-link popover-open=".chart-data-type-popover-menu">
+                <f7-link popover-open=".chart-data-type-popover-menu" :class="{ 'disabled': loading }">
                     <span style="color: var(--f7-text-color)">{{ displayPageTypeName }}</span>
                     <f7-icon class="page-title-bar-icon" color="gray" style="opacity: 0.5" f7="chevron_down_circle_fill"></f7-icon>
                 </f7-link>
             </f7-nav-title>
-            <f7-nav-right class="navbar-compact-icons">
+            <f7-nav-right :class="{ 'navbar-compact-icons': true, 'disabled': loading }">
+                <f7-link icon-f7="search" @click="toggleSearchbar"></f7-link>
                 <f7-link icon-f7="plus" :class="{ 'disabled': !canAddTransaction }" @click="add"></f7-link>
             </f7-nav-right>
 
-            <f7-subnavbar :inner="false">
+            <f7-subnavbar :inner="false" v-if="showSearchbar">
                 <f7-searchbar
                     custom-searchs
                     :value="query.keyword"
                     :placeholder="tt('Search transaction description')"
                     :disable-button-text="tt('Cancel')"
                     @change="changeKeywordFilter($event.target.value)"
+                    @click:clear="changeKeywordFilter(''); showSearchbar = false"
+                    @searchbar:disable="changeKeywordFilter(''); showSearchbar = false"
                 ></f7-searchbar>
             </f7-subnavbar>
         </f7-navbar>
 
-        <f7-popover class="chart-data-type-popover-menu"
-                    v-model:opened="showTransactionListPageTypePopover">
+        <f7-popover class="chart-data-type-popover-menu">
             <f7-list dividers>
-                <f7-list-item :title="tt(type.name)"
+                <f7-list-item link="#" no-chevron popover-close
+                              :title="tt(type.name)"
                               :class="{ 'list-item-selected': pageType === type.type }"
                               :key="type.type"
                               v-for="type in TransactionListPageType.values()"
-                              @click="changePageType(type.type); showTransactionListPageTypePopover = false">
+                              @click="changePageType(type.type)">
                     <template #after>
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="pageType === type.type"></f7-icon>
                     </template>
@@ -45,24 +48,24 @@
             </f7-list>
         </f7-popover>
 
-        <f7-toolbar tabbar bottom class="toolbar-item-auto-size transaction-list-toolbar">
+        <f7-toolbar tabbar bottom class="compact-tabbar toolbar-item-auto-size transaction-list-toolbar">
             <f7-link :class="{ 'disabled': loading || query.dateType === DateRange.All.type }" @click="shiftDateRange(query.minTime, query.maxTime, -1)">
                 <f7-icon class="icon-with-direction" f7="arrow_left_square"></f7-icon>
             </f7-link>
-            <f7-link :class="{ 'tabbar-text-with-ellipsis': true, 'disabled': loading }" popover-open=".date-popover-menu">
+            <f7-link popover-open=".date-popover-menu" :class="{ 'tabbar-text-with-ellipsis': true, 'disabled': loading }">
                 <span :class="{ 'tabbar-item-changed': query.dateType !== DateRange.All.type }">{{ queryDateRangeName }}</span>
             </f7-link>
             <f7-link :class="{ 'disabled': loading || query.dateType === DateRange.All.type }" @click="shiftDateRange(query.minTime, query.maxTime, 1)">
                 <f7-icon class="icon-with-direction" f7="arrow_right_square"></f7-icon>
             </f7-link>
-            <f7-link class="tabbar-text-with-ellipsis" popover-open=".category-popover-menu" :class="{ 'disabled': query.type === 1 }">
+            <f7-link popover-open=".category-popover-menu" :class="{ 'tabbar-text-with-ellipsis': true, 'disabled': loading || query.type === 1 }">
                 <span :class="{ 'tabbar-item-changed': query.categoryIds }">{{ queryCategoryName }}</span>
             </f7-link>
-            <f7-link class="tabbar-text-with-ellipsis" popover-open=".account-popover-menu">
+            <f7-link popover-open=".account-popover-menu" :class="{ 'tabbar-text-with-ellipsis': true, 'disabled': loading }">
                 <span :class="{ 'tabbar-item-changed': query.accountIds }">{{ queryAccountName }}</span>
             </f7-link>
-            <f7-link popover-open=".more-popover-menu">
-                <f7-icon f7="ellipsis_vertical" :class="{ 'tabbar-item-changed': query.type > 0 || query.amountFilter || query.tagIds }"></f7-icon>
+            <f7-link popover-open=".more-popover-menu" :class="{ 'disabled': loading }">
+                <f7-icon f7="ellipsis_vertical" :class="{ 'tabbar-item-changed': query.type > 0 || query.amountFilter || query.tagFilter }"></f7-icon>
             </f7-link>
         </f7-toolbar>
 
@@ -200,9 +203,9 @@
                                       v-for="(transaction, idx) in transactionMonthList.items"
                         >
                             <template #media>
-                                <div class="display-flex flex-direction-column transaction-date" :style="getTransactionDateStyle(transaction, idx > 0 ? transactionMonthList.items[idx - 1] : null)">
+                                <div class="display-flex flex-direction-column transaction-date" :style="getTransactionDateStyle(transaction, idx > 0 ? transactionMonthList.items[idx - 1] : undefined)">
                                     <span class="transaction-day full-line flex-direction-column">
-                                        {{ getCalendarDisplayDayOfMonthFromUnixTime(transaction.time) }}
+                                        {{ transaction.gregorianCalendarDayOfMonth ? numeralSystem.formatNumber(transaction.gregorianCalendarDayOfMonth) : '' }}
                                     </span>
                                     <span class="transaction-day-of-week full-line flex-direction-column" v-if="transaction.displayDayOfWeek">
                                         {{ getWeekdayShortName(transaction.displayDayOfWeek) }}
@@ -252,7 +255,7 @@
                                         <div class="item-footer">
                                             <div class="transaction-tags" v-if="showTagInTransactionListPage && transaction.tagIds && transaction.tagIds.length">
                                                 <f7-chip media-text-color="var(--f7-chip-text-color)" class="transaction-tag"
-                                                         :text="allTransactionTags[tagId].name"
+                                                         :text="allTransactionTags[tagId]?.name"
                                                          :key="tagId"
                                                          v-for="tagId in transaction.tagIds">
                                                     <template #media>
@@ -262,7 +265,7 @@
                                             </div>
                                             <div class="transaction-footer">
                                                 <span>{{ getDisplayTime(transaction) }}</span>
-                                                <span v-if="transaction.utcOffset !== currentTimezoneOffsetMinutes">{{ `(${getDisplayTimezone(transaction)})` }}</span>
+                                                <span v-if="!isSameAsDefaultTimezoneOffsetMinutes(transaction)">{{ `(${getDisplayTimezone(transaction)})` }}</span>
                                                 <span v-if="transaction.sourceAccount">·</span>
                                                 <span v-if="transaction.sourceAccount">{{ transaction.sourceAccount.name }}</span>
                                                 <f7-icon class="transaction-account-arrow icon-with-direction" f7="arrow_right" v-if="transaction.sourceAccount && transaction.type === TransactionType.Transfer && transaction.destinationAccount && transaction.sourceAccount.id !== transaction.destinationAccount.id"></f7-icon>
@@ -299,11 +302,10 @@
             <f7-link href="#" @click="loadMore(false)">{{ tt('Load More') }}</f7-link>
         </f7-block>
 
-        <f7-popover class="date-popover-menu"
-                    v-model:opened="showDatePopover"
-                    @popover:open="onPopoverOpen">
+        <f7-popover class="date-popover-menu" @popover:open="onPopoverOpen">
             <f7-list dividers>
-                <f7-list-item :title="dateRange.displayName"
+                <f7-list-item link="#" no-chevron popover-close
+                              :title="dateRange.displayName"
                               :class="{ 'list-item-selected': query.dateType === dateRange.type }"
                               :key="dateRange.type"
                               v-for="dateRange in allDateRanges"
@@ -337,11 +339,12 @@
                                @update:modelValue="changeCustomMonthDateFilter">
         </month-selection-sheet>
 
-        <f7-popover class="category-popover-menu"
-                    v-model:opened="showCategoryPopover"
-                    @popover:open="onPopoverOpen">
+        <f7-popover class="category-popover-menu" @popover:open="onCategoryPopoverOpen">
             <f7-list dividers accordion-list>
-                <f7-list-item :class="{ 'list-item-selected': !query.categoryIds }" :title="tt('All')" @click="changeCategoryFilter('')">
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': !query.categoryIds }"
+                              :title="tt('All')"
+                              @click="changeCategoryFilter('')">
                     <template #media>
                         <f7-icon f7="rectangle_grid_2x2"></f7-icon>
                     </template>
@@ -349,7 +352,8 @@
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="!query.categoryIds"></f7-icon>
                     </template>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': query.categoryIds && queryAllFilterCategoryIdsCount > 1 }"
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': query.categoryIds && queryAllFilterCategoryIdsCount > 1 }"
                               :title="tt('Multiple Categories')"
                               @click="filterMultipleCategories()"
                               v-if="allAvailableCategoriesCount > 0">
@@ -360,63 +364,64 @@
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.categoryIds && queryAllFilterCategoryIdsCount > 1"></f7-icon>
                     </template>
                 </f7-list-item>
-            </f7-list>
-            <f7-list dividers accordion-list
-                     class="no-margin-vertical"
-                     :key="categoryType"
-                     v-for="(categories, categoryType) in allPrimaryCategories"
-                     v-show="categories && categories.length"
-            >
-                <f7-list-item divider :title="getTransactionTypeName(categoryTypeToTransactionType(parseInt(categoryType)), 'Type')"></f7-list-item>
-                <f7-list-item accordion-item
-                              :title="category.name"
-                              :class="getCategoryListItemCheckedClass(category, queryAllFilterCategoryIds)"
-                              :key="category.id"
-                              v-for="category in categories"
-                              v-show="!category.hidden || query.categoryIds === category.id || (allCategories[query.categoryIds] && allCategories[query.categoryIds].parentId === category.id)"
-                >
-                    <template #media>
-                        <ItemIcon icon-type="category" :icon-id="category.icon" :color="category.color"></ItemIcon>
+                <template :key="categoryType"
+                          v-for="(categories, categoryType) in allPrimaryCategories">
+                    <template v-if="categories && categories.length">
+                        <f7-list-item divider :title="getTransactionTypeName(categoryTypeToTransactionType(parseInt(categoryType)), 'Type')"></f7-list-item>
+                        <f7-list-item accordion-item
+                                      :title="category.name"
+                                      :class="getCategoryListItemCheckedClass(category, queryAllFilterCategoryIds)"
+                                      :key="category.id"
+                                      v-for="category in categories"
+                                      v-show="!category.hidden || queryAllFilterCategoryIds[category.id] || allCategories[query.categoryIds]?.parentId === category.id || hasSubCategoryInQuery(category)"
+                        >
+                            <template #media>
+                                <ItemIcon icon-type="category" :icon-id="category.icon" :color="category.color"></ItemIcon>
+                            </template>
+                            <f7-accordion-content>
+                                <f7-list dividers class="padding-inline-start">
+                                    <f7-list-item link="#" no-chevron popover-close
+                                                  :class="{ 'list-item-selected': query.categoryIds === category.id, 'item-in-multiple-selection': queryAllFilterCategoryIdsCount > 1 && queryAllFilterCategoryIds[category.id] }"
+                                                  :title="tt('All')" @click="changeCategoryFilter(category.id)">
+                                        <template #media>
+                                            <f7-icon f7="rectangle_grid_2x2"></f7-icon>
+                                        </template>
+                                        <template #after>
+                                            <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.categoryIds === category.id"></f7-icon>
+                                        </template>
+                                    </f7-list-item>
+                                    <f7-list-item link="#" no-chevron popover-close
+                                                  :class="{ 'list-item-selected': query.categoryIds === subCategory.id, 'item-in-multiple-selection': queryAllFilterCategoryIdsCount > 1 && queryAllFilterCategoryIds[subCategory.id] }"
+                                                  :title="subCategory.name"
+                                                  :key="subCategory.id"
+                                                  v-for="subCategory in category.subCategories"
+                                                  v-show="!subCategory.hidden || queryAllFilterCategoryIds[subCategory.id]"
+                                                  @click="changeCategoryFilter(subCategory.id)"
+                                    >
+                                        <template #media>
+                                            <ItemIcon icon-type="category" :icon-id="subCategory.icon" :color="subCategory.color"></ItemIcon>
+                                        </template>
+                                        <template #after>
+                                            <f7-icon class="list-item-checked-icon"
+                                                     f7="checkmark_alt"
+                                                     v-if="query.categoryIds === subCategory.id">
+                                            </f7-icon>
+                                        </template>
+                                    </f7-list-item>
+                                </f7-list>
+                            </f7-accordion-content>
+                        </f7-list-item>
                     </template>
-                    <f7-accordion-content>
-                        <f7-list dividers class="padding-inline-start">
-                            <f7-list-item :class="{ 'list-item-selected': query.categoryIds === category.id, 'item-in-multiple-selection': queryAllFilterCategoryIdsCount > 1 && queryAllFilterCategoryIds[category.id] }"
-                                          :title="tt('All')" @click="changeCategoryFilter(category.id)">
-                                <template #media>
-                                    <f7-icon f7="rectangle_grid_2x2"></f7-icon>
-                                </template>
-                                <template #after>
-                                    <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.categoryIds === category.id"></f7-icon>
-                                </template>
-                            </f7-list-item>
-                            <f7-list-item :title="subCategory.name"
-                                          :class="{ 'list-item-selected': query.categoryIds === subCategory.id, 'item-in-multiple-selection': queryAllFilterCategoryIdsCount > 1 && queryAllFilterCategoryIds[subCategory.id] }"
-                                          :key="subCategory.id"
-                                          v-for="subCategory in category.subCategories"
-                                          v-show="!subCategory.hidden || query.categoryIds === subCategory.id"
-                                          @click="changeCategoryFilter(subCategory.id)"
-                            >
-                                <template #media>
-                                    <ItemIcon icon-type="category" :icon-id="subCategory.icon" :color="subCategory.color"></ItemIcon>
-                                </template>
-                                <template #after>
-                                    <f7-icon class="list-item-checked-icon"
-                                             f7="checkmark_alt"
-                                             v-if="query.categoryIds === subCategory.id">
-                                    </f7-icon>
-                                </template>
-                            </f7-list-item>
-                        </f7-list>
-                    </f7-accordion-content>
-                </f7-list-item>
+                </template>
             </f7-list>
         </f7-popover>
 
-        <f7-popover class="account-popover-menu"
-                    v-model:opened="showAccountPopover"
-                    @popover:open="onPopoverOpen">
+        <f7-popover class="account-popover-menu" @popover:open="onPopoverOpen">
             <f7-list dividers>
-                <f7-list-item :class="{ 'list-item-selected': !query.accountIds }" :title="tt('All')" @click="changeAccountFilter('')">
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': !query.accountIds }"
+                              :title="tt('All')"
+                              @click="changeAccountFilter('')">
                     <template #media>
                         <f7-icon f7="rectangle_grid_2x2"></f7-icon>
                     </template>
@@ -424,7 +429,8 @@
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="!query.accountIds"></f7-icon>
                     </template>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': query.accountIds && queryAllFilterAccountIdsCount > 1 }"
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': query.accountIds && queryAllFilterAccountIdsCount > 1 }"
                               :title="tt('Multiple Accounts')"
                               @click="filterMultipleAccounts()"
                               v-if="allAvailableAccountsCount > 0">
@@ -435,11 +441,12 @@
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.accountIds && queryAllFilterAccountIdsCount > 1"></f7-icon>
                     </template>
                 </f7-list-item>
-                <f7-list-item :title="account.name"
+                <f7-list-item link="#" no-chevron popover-close
                               :class="{ 'list-item-selected': query.accountIds === account.id, 'item-in-multiple-selection': queryAllFilterAccountIdsCount > 1 && queryAllFilterAccountIds[account.id] }"
+                              :title="account.name"
                               :key="account.id"
                               v-for="account in allAccounts"
-                              v-show="(!account.hidden && (!allAccountsMap[account.parentId] || !allAccountsMap[account.parentId].hidden)) || query.accountIds === account.id"
+                              v-show="(!account.hidden && (!allAccountsMap[account.parentId] || !allAccountsMap[account.parentId]!.hidden)) || queryAllFilterAccountIds[account.id]"
                               @click="changeAccountFilter(account.id)"
                 >
                     <template #media>
@@ -455,33 +462,47 @@
             </f7-list>
         </f7-popover>
 
-        <f7-popover class="more-popover-menu"
-                    v-model:opened="showMorePopover">
+        <f7-popover class="more-popover-menu">
             <f7-list dividers>
                 <f7-list-item group-title>
                     <small>{{ tt('Type') }}</small>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': query.type === 0 }" :title="tt('All')" @click="changeTypeFilter(0)">
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': query.type === 0 }"
+                              :title="tt('All')"
+                              @click="changeTypeFilter(0)">
                     <template #after>
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.type === 0"></f7-icon>
                     </template>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': query.type === 1 }" :title="tt('Modify Balance')" @click="changeTypeFilter(1)">
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': query.type === 1 }"
+                              :title="tt('Modify Balance')"
+                              @click="changeTypeFilter(1)">
                     <template #after>
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.type === 1"></f7-icon>
                     </template>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': query.type === 2 }" :title="tt('Income')" @click="changeTypeFilter(2)">
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': query.type === 2 }"
+                              :title="tt('Income')"
+                              @click="changeTypeFilter(2)">
                     <template #after>
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.type === 2"></f7-icon>
                     </template>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': query.type === 3 }" :title="tt('Expense')" @click="changeTypeFilter(3)">
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': query.type === 3 }"
+                              :title="tt('Expense')"
+                              @click="changeTypeFilter(3)">
                     <template #after>
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.type === 3"></f7-icon>
                     </template>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': query.type === 4 }" :title="tt('Transfer')" @click="changeTypeFilter(4)">
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': query.type === 4 }"
+                              :title="tt('Transfer')"
+                              @click="changeTypeFilter(4)">
                     <template #after>
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.type === 4"></f7-icon>
                     </template>
@@ -490,12 +511,16 @@
                 <f7-list-item group-title>
                     <small>{{ tt('Amount') }}</small>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': !query.amountFilter }" :title="tt('All')" @click="changeAmountFilter('')">
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': !query.amountFilter }"
+                              :title="tt('All')"
+                              @click="changeAmountFilter('')">
                     <template #after>
                         <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="!query.amountFilter"></f7-icon>
                     </template>
                 </f7-list-item>
-                <f7-list-item :key="filterType.type"
+                <f7-list-item link="#" no-chevron popover-close
+                              :key="filterType.type"
                               :class="{ 'list-item-selected': query.amountFilter && query.amountFilter.startsWith(`${filterType.type}:`) }"
                               :title="tt(filterType.name)"
                               v-for="filterType in AmountFilterType.values()"
@@ -509,55 +534,55 @@
                 <f7-list-item group-title>
                     <small>{{ tt('Tags') }}</small>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': !query.tagIds }" :title="tt('All')" @click="changeTagFilter('')">
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': !query.tagFilter }"
+                              :title="tt('All')"
+                              @click="changeTagFilter('')">
                     <template #after>
-                        <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="!query.tagIds"></f7-icon>
+                        <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="!query.tagFilter"></f7-icon>
                     </template>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': query.tagIds === 'none' }" :title="tt('Without Tags')" @click="changeTagFilter('none')">
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': query.tagFilter === TransactionTagFilter.TransactionNoTagFilterValue }"
+                              :title="tt('Without Tags')"
+                              @click="changeTagFilter(TransactionTagFilter.TransactionNoTagFilterValue)">
                     <template #after>
-                        <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.tagIds === 'none'"></f7-icon>
+                        <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.tagFilter === TransactionTagFilter.TransactionNoTagFilterValue"></f7-icon>
                     </template>
                 </f7-list-item>
-                <f7-list-item :class="{ 'list-item-selected': query.tagIds && queryAllFilterTagIdsCount > 1 }"
+                <f7-list-item link="#" no-chevron popover-close
+                              :class="{ 'list-item-selected': query.tagFilter && queryAllFilterTagIdsCount > 1 }"
                               :title="tt('Multiple Tags')" @click="filterMultipleTags()" v-if="allAvailableTagsCount > 0">
                     <template #after>
-                        <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.tagIds && queryAllFilterTagIdsCount > 1"></f7-icon>
+                        <f7-icon class="list-item-checked-icon" f7="checkmark_alt" v-if="query.tagFilter && queryAllFilterTagIdsCount > 1"></f7-icon>
                     </template>
                 </f7-list-item>
 
-                <template v-if="query.tagIds && query.tagIds !== 'none'">
-                    <f7-list-item :title="filterType.displayName"
-                                  :key="filterType.type"
-                                  v-for="filterType in allTransactionTagFilterTypes"
-                                  @click="changeTagFilterType(filterType.type)"
+                <template :key="transactionTagGroup.id"
+                          v-for="transactionTagGroup in allTransactionTagGroupsWithDefault">
+                    <f7-list-item group-title class="transaction-tag-group" v-if="allTransactionTagsByGroup[transactionTagGroup.id] && allTransactionTagsByGroup[transactionTagGroup.id]?.length && hasVisibleTagsInTagGroup(transactionTagGroup)">
+                        <small>{{ transactionTagGroup.name }}</small>
+                    </f7-list-item>
+
+                    <f7-list-item link="#" no-chevron popover-close
+                                  :title="transactionTag.name"
+                                  :class="{ 'list-item-selected': queryAllFilterTagIdsCount === 1 && isDefined(queryAllFilterTagIds[transactionTag.id]), 'item-in-multiple-selection': queryAllFilterTagIdsCount > 1 && isDefined(queryAllFilterTagIds[transactionTag.id]) }"
+                                  :key="transactionTag.id"
+                                  v-for="transactionTag in (allTransactionTagsByGroup[transactionTagGroup.id] ?? [])"
+                                  v-show="!transactionTag.hidden || isDefined(queryAllFilterTagIds[transactionTag.id])"
+                                  @click="changeTagFilter(TransactionTagFilter.of(transactionTag.id).toTextualTagFilter())"
                     >
+                        <template #before-title>
+                            <f7-icon class="transaction-tag-name transaction-tag-icon" f7="number"></f7-icon>
+                        </template>
                         <template #after>
                             <f7-icon class="list-item-checked-icon"
-                                     f7="checkmark_alt"
-                                     v-if="query.tagFilterType === filterType.type">
+                                     :f7="queryAllFilterTagIds[transactionTag.id] === true ? 'checkmark_alt' : (queryAllFilterTagIds[transactionTag.id] === false ? 'multiply' : undefined)"
+                                     v-if="isDefined(queryAllFilterTagIds[transactionTag.id])">
                             </f7-icon>
                         </template>
                     </f7-list-item>
                 </template>
-
-                <f7-list-item :title="transactionTag.name"
-                              :class="{ 'list-item-selected': query.tagIds === transactionTag.id, 'item-in-multiple-selection': queryAllFilterTagIdsCount > 1 && queryAllFilterTagIds[transactionTag.id] }"
-                              :key="transactionTag.id"
-                              v-for="transactionTag in allTransactionTags"
-                              v-show="!transactionTag.hidden || query.tagIds === transactionTag.id"
-                              @click="changeTagFilter(transactionTag.id)"
-                >
-                    <template #before-title>
-                        <f7-icon class="transaction-tag-name transaction-tag-icon" f7="number"></f7-icon>
-                    </template>
-                    <template #after>
-                        <f7-icon class="list-item-checked-icon"
-                                 f7="checkmark_alt"
-                                 v-if="query.tagIds === transactionTag.id">
-                        </f7-icon>
-                    </template>
-                </f7-list-item>
             </f7-list>
         </f7-popover>
 
@@ -578,6 +603,7 @@ import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
 import type { Router } from 'framework7/types';
 
 import { useI18n } from '@/locales/helpers.ts';
+import { scrollToSelectedItem } from '@/lib/ui/common.ts';
 import {
     type Framework7Dom,
     useI18nUIComponents,
@@ -586,7 +612,6 @@ import {
     onSwipeoutDeleted,
     getElementActualHeights,
     getElementBoundingRect,
-    scrollToSelectedItem,
     onInfiniteScrolling
 } from '@/lib/ui/mobile.ts';
 import { TransactionListPageType, useTransactionListPageBase } from '@/views/base/transactions/TransactionListPageBase.ts';
@@ -597,7 +622,7 @@ import { useTransactionCategoriesStore } from '@/stores/transactionCategory.ts';
 import { useTransactionTagsStore } from '@/stores/transactionTag.ts';
 import { type TransactionMonthList, useTransactionsStore } from '@/stores/transaction.ts';
 
-import type { TypeAndDisplayName } from '@/core/base.ts';
+import { keys } from '@/core/base.ts';
 import { TextDirection } from '@/core/text.ts';
 import {
     type TextualYearMonth,
@@ -606,20 +631,20 @@ import {
     DateRangeScene,
     DateRange
 } from '@/core/datetime.ts';
-import { AmountFilterType } from '@/core/numeral.ts';
+import { type NumeralSystem, AmountFilterType } from '@/core/numeral.ts';
 import { TransactionType } from '@/core/transaction.ts';
 import type { TransactionCategory } from '@/models/transaction_category.ts';
-import type { Transaction } from '@/models/transaction.ts';
+import { type Transaction, TransactionTagFilter } from '@/models/transaction.ts';
 
 import {
-    isNumber
+    isDefined,
+    isNumber,
+    objectFieldWithValueToArrayItem
 } from '@/lib/common.ts';
 import {
     getCurrentUnixTime,
     parseDateTimeFromUnixTime,
-    getBrowserTimezoneOffsetMinutes,
-    getActualUnixTimeForStore,
-    getDayFirstUnixTimeBySpecifiedUnixTime,
+    getDayFirstDateTimeBySpecifiedUnixTime,
     getYearMonthFirstUnixTime,
     getYearMonthLastUnixTime,
     getShiftedDateRangeAndDateType,
@@ -644,9 +669,8 @@ const props = defineProps<{
 const {
     tt,
     getCurrentLanguageTextDirection,
-    getAllTransactionTagFilterTypes,
-    getWeekdayShortName,
-    getCalendarDisplayDayOfMonthFromUnixTime
+    getCurrentNumeralSystemType,
+    getWeekdayShortName
 } = useI18n();
 
 const { showAlert, showToast, routeBackOnError } = useI18nUIComponents();
@@ -657,7 +681,6 @@ const {
     customMinDatetime,
     customMaxDatetime,
     currentCalendarDate,
-    currentTimezoneOffsetMinutes,
     firstDayOfWeek,
     fiscalYearStart,
     defaultCurrency,
@@ -670,6 +693,8 @@ const {
     allCategories,
     allPrimaryCategories,
     allAvailableCategoriesCount,
+    allTransactionTagGroupsWithDefault,
+    allTransactionTagsByGroup,
     allTransactionTags,
     allAvailableTagsCount,
     displayPageTypeName,
@@ -691,6 +716,9 @@ const {
     transactionCalendarMinDate,
     transactionCalendarMaxDate,
     currentMonthTransactionData,
+    hasSubCategoryInQuery,
+    hasVisibleTagsInTagGroup,
+    isSameAsDefaultTimezoneOffsetMinutes,
     canAddTransaction,
     getDisplayTime,
     getDisplayLongYearMonth,
@@ -711,19 +739,14 @@ const loadingMore = ref<boolean>(false);
 const transactionToDelete = ref<Transaction | null>(null);
 const transactionInvisibleYearMonths = ref<Record<TextualYearMonth, boolean>>({});
 const transactionYearMonthListHeights = ref<Record<TextualYearMonth, number>>({});
-const showTransactionListPageTypePopover = ref<boolean>(false);
-const showDatePopover = ref<boolean>(false);
-const showCategoryPopover = ref<boolean>(false);
-const showAccountPopover = ref<boolean>(false);
-const showMorePopover = ref<boolean>(false);
+const showSearchbar = ref<boolean>(false);
 const showCustomDateRangeSheet = ref<boolean>(false);
 const showCustomMonthSheet = ref<boolean>(false);
 const showDeleteActionSheet = ref<boolean>(false);
 
 const textDirection = computed<TextDirection>(() => getCurrentLanguageTextDirection());
+const numeralSystem = computed<NumeralSystem>(() => getCurrentNumeralSystemType());
 const isDarkMode = computed<boolean>(() => environmentsStore.framework7DarkMode || false);
-
-const allTransactionTagFilterTypes = computed<TypeAndDisplayName[]>(() => getAllTransactionTagFilterTypes());
 
 const transactions = computed<TransactionMonthList[]>(() => {
     if (loading.value) {
@@ -742,9 +765,7 @@ const transactions = computed<TransactionMonthList[]>(() => {
 
             const transactions :Transaction[] = [];
 
-            for (let i = 0; i < transactionData.items.length; i++) {
-                const transaction = transactionData.items[i];
-
+            for (const transaction of transactionData.items) {
                 if (transaction.gregorianCalendarYearDashMonthDashDay === currentCalendarDate.value) {
                     transactions.push(transaction);
                 }
@@ -778,7 +799,7 @@ const noTransaction = computed<boolean>(() => {
     if (pageType.value === TransactionListPageType.List.type) {
         return transactionsStore.noTransaction;
     } else if (pageType.value === TransactionListPageType.Calendar.type) {
-        return !transactions.value || !transactions.value.length || !transactions.value[0].items || !transactions.value[0].items.length;
+        return !transactions.value || !transactions.value.length || !transactions.value[0]!.items || !transactions.value[0]!.items.length;
     } else {
         return true;
     }
@@ -833,7 +854,7 @@ function setTransactionMonthListHeights(reset: boolean): Promise<unknown> {
             const heights: Record<string, number> = getElementActualHeights('.transaction-month-list');
 
             for (let i = 0; i < transactions.value.length - 1; i++) {
-                const transactionMonthList = transactions.value[i];
+                const transactionMonthList = transactions.value[i] as TransactionMonthList;
                 const yearDashMonth = transactionMonthList.yearDashMonth;
                 const domId = getTransactionMonthListDomId(yearDashMonth);
                 const height = heights[domId];
@@ -852,7 +873,7 @@ function setTransactionInvisibleYearMonthList(): void {
     }
 
     for (let i = 0; i < transactions.value.length - 1; i++) {
-        const transactionMonthList = transactions.value[i];
+        const transactionMonthList = transactions.value[i] as TransactionMonthList;
         const yearDashMonth = transactionMonthList.yearDashMonth;
 
         const titleDomId = getTransactionMonthTitleDomId(yearDashMonth);
@@ -875,7 +896,7 @@ function setTransactionInvisibleYearMonthList(): void {
     }
 }
 
-function getTransactionDateStyle(transaction: Transaction, previousTransaction: Transaction | null): Record<string, string> {
+function getTransactionDateStyle(transaction: Transaction, previousTransaction: Transaction | undefined): Record<string, string> {
     if (!previousTransaction || transaction.gregorianCalendarDayOfMonth !== previousTransaction.gregorianCalendarDayOfMonth) {
         return {};
     }
@@ -893,8 +914,8 @@ function getCategoryListItemCheckedClass(category: TransactionCategory, queryCat
     }
 
     if (category.subCategories) {
-        for (let i = 0; i < category.subCategories.length; i++) {
-            if (queryCategoryIds && queryCategoryIds[category.subCategories[i].id]) {
+        for (const subCategory of category.subCategories) {
+            if (queryCategoryIds && queryCategoryIds[subCategory.id]) {
                 return {
                     'list-item-checked': true
                 };
@@ -927,8 +948,7 @@ function init(): void {
         type: initQuery['type'] && parseInt(initQuery['type']) > 0 ? parseInt(initQuery['type']) : undefined,
         categoryIds: initQuery['categoryIds'],
         accountIds: initQuery['accountIds'],
-        tagIds: initQuery['tagIds'],
-        tagFilterType: initQuery['tagFilterType'] && parseInt(initQuery['tagFilterType']) >= 0 ? parseInt(initQuery['tagFilterType']) : undefined,
+        tagFilter: initQuery['tagFilter'],
         keyword: initQuery['keyword']
     });
 
@@ -1046,8 +1066,8 @@ function changePageType(type: number): void {
 function changeDateFilter(dateType: number): void {
     if (dateType === DateRange.Custom.type) { // Custom
         if (!query.value.minTime || !query.value.maxTime) {
-            customMaxDatetime.value = getActualUnixTimeForStore(getCurrentUnixTime(), currentTimezoneOffsetMinutes.value, getBrowserTimezoneOffsetMinutes());
-            customMinDatetime.value = getDayFirstUnixTimeBySpecifiedUnixTime(customMaxDatetime.value);
+            customMaxDatetime.value = getCurrentUnixTime();
+            customMinDatetime.value = getDayFirstDateTimeBySpecifiedUnixTime(customMaxDatetime.value).getUnixTime();
         } else {
             customMaxDatetime.value = query.value.maxTime;
             customMinDatetime.value = query.value.minTime;
@@ -1059,7 +1079,6 @@ function changeDateFilter(dateType: number): void {
             showCustomDateRangeSheet.value = true;
         }
 
-        showDatePopover.value = false;
         return;
     } else if (query.value.dateType === dateType) {
         return;
@@ -1092,8 +1111,6 @@ function changeDateFilter(dateType: number): void {
         maxTime: dateRange.maxTime,
         minTime: dateRange.minTime
     });
-
-    showDatePopover.value = false;
 
     if (changed) {
         reload();
@@ -1208,11 +1225,7 @@ function changeTypeFilter(type: number): void {
     if (type && query.value.categoryIds) {
         newCategoryFilter = '';
 
-        for (const categoryId in queryAllFilterCategoryIds.value) {
-            if (!Object.prototype.hasOwnProperty.call(queryAllFilterCategoryIds.value, categoryId)) {
-                continue;
-            }
-
+        for (const categoryId of keys(queryAllFilterCategoryIds.value)) {
             const category = allCategories.value[categoryId];
 
             if (category && category.type === transactionTypeToCategoryType(type)) {
@@ -1230,8 +1243,6 @@ function changeTypeFilter(type: number): void {
         categoryIds: newCategoryFilter
     });
 
-    showMorePopover.value = false;
-
     if (changed) {
         reload();
     }
@@ -1245,8 +1256,6 @@ function changeCategoryFilter(categoryIds: string): void {
     const changed = transactionsStore.updateTransactionListFilter({
         categoryIds: categoryIds
     });
-
-    showCategoryPopover.value = false;
 
     if (changed) {
         reload();
@@ -1272,8 +1281,6 @@ function changeAccountFilter(accountIds: string): void {
         accountIds: accountIds
     });
 
-    showAccountPopover.value = false;
-
     if (changed) {
         reload();
     }
@@ -1283,16 +1290,14 @@ function filterMultipleAccounts(): void {
     props.f7router.navigate('/settings/filter/account?type=transactionListCurrent');
 }
 
-function changeTagFilter(tagIds: string): void {
-    if (query.value.tagIds === tagIds) {
+function changeTagFilter(tagFilter: string): void {
+    if (query.value.tagFilter === tagFilter) {
         return;
     }
 
     const changed = transactionsStore.updateTransactionListFilter({
-        tagIds: tagIds
+        tagFilter: tagFilter
     });
-
-    showMorePopover.value = false;
 
     if (changed) {
         reload();
@@ -1303,19 +1308,15 @@ function filterMultipleTags(): void {
     props.f7router.navigate('/settings/filter/tag?type=transactionListCurrent');
 }
 
-function changeTagFilterType(filterType: number): void {
-    if (query.value.tagFilterType === filterType) {
-        return;
-    }
+function toggleSearchbar(): void {
+    if (!showSearchbar.value) {
+        showSearchbar.value = true;
+    } else {
+        showSearchbar.value = false;
 
-    const changed = transactionsStore.updateTransactionListFilter({
-        tagFilterType: filterType
-    });
-
-    showMorePopover.value = false;
-
-    if (changed) {
-        reload();
+        if (query.value.keyword) {
+            changeKeywordFilter('');
+        }
     }
 }
 
@@ -1339,7 +1340,6 @@ function changeAmountFilter(filterType: string): void {
     }
 
     if (filterType) {
-        showMorePopover.value = false;
         props.f7router.navigate(`/transaction/filter/amount?type=${filterType}&value=${query.value.amountFilter}`);
         return;
     }
@@ -1347,8 +1347,6 @@ function changeAmountFilter(filterType: string): void {
     const changed = transactionsStore.updateTransactionListFilter({
         amountFilter: filterType
     });
-
-    showMorePopover.value = false;
 
     if (changed) {
         reload();
@@ -1389,8 +1387,8 @@ function add(): void {
         params.push(`accountId=${query.value.accountIds}`);
     }
 
-    if (query.value.tagIds) {
-        params.push(`tagIds=${query.value.tagIds}`);
+    if (query.value.tagFilter) {
+        params.push(`tagIds=${objectFieldWithValueToArrayItem(queryAllFilterTagIds.value, true).join(',') || ''}`);
     }
 
     props.f7router.navigate(`/transaction/add?${params.join('&')}`);
@@ -1449,7 +1447,11 @@ function collapseTransactionMonthList(monthList: TransactionMonthList, collapse:
 }
 
 function onPopoverOpen(event: { $el: Framework7Dom }): void {
-    scrollToSelectedItem(event.$el, '.popover-inner', 'li.list-item-selected');
+    scrollToSelectedItem(event.$el[0], '.popover-inner', '.popover-inner', 'li.list-item-selected');
+}
+
+function onCategoryPopoverOpen(event: { $el: Framework7Dom }): void {
+    scrollToSelectedItem(event.$el[0], '.popover-inner', '.popover-inner', 'li.list-item-checked');
 }
 
 function onPageAfterIn(): void {
@@ -1611,9 +1613,23 @@ html[dir="rtl"] .list.transaction-info-list li.transaction-info .transaction-foo
 .date-popover-menu .popover-inner,
 .category-popover-menu .popover-inner,
 .account-popover-menu .popover-inner,
-.more-popover-menu .popover-inner{
+.more-popover-menu .popover-inner {
     max-height: 400px;
     overflow-y: auto;
+}
+
+.more-popover-menu .transaction-tag-group {
+    background-color: inherit;
+
+    > small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+.transaction-calendar-container .dp__theme_light,
+.transaction-calendar-container .dp__theme_dark {
+    --dp-background-color: var(--f7-list-strong-bg-color);
 }
 
 .transaction-calendar-container .dp__main .dp__menu {

@@ -1,9 +1,9 @@
 <template>
     <f7-page ptr @ptr:refresh="reload">
         <f7-navbar>
-            <f7-nav-left :back-link="tt('Back')"></f7-nav-left>
+            <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
             <f7-nav-title :title="tt('Exchange Rates Data')"></f7-nav-title>
-            <f7-nav-right>
+            <f7-nav-right :class="{ 'disabled': loading }">
                 <f7-link icon-f7="ellipsis" @click="showMoreActionSheet = true"></f7-link>
             </f7-nav-right>
         </f7-navbar>
@@ -91,7 +91,7 @@
             <f7-list-item>
                 <small>{{ tt('Data source') }}</small>
                 <small>
-                    <f7-link external target="_blank" :href="exchangeRatesData.referenceUrl" v-if="!isUserCustomExchangeRates && exchangeRatesData.referenceUrl">{{ exchangeRatesData.dataSource }}</f7-link>
+                    <f7-link @click="openExternalUrl(exchangeRatesData.referenceUrl)" v-if="!isUserCustomExchangeRates && exchangeRatesData.referenceUrl">{{ exchangeRatesData.dataSource }}</f7-link>
                     <span v-else-if="!isUserCustomExchangeRates && !exchangeRatesData.referenceUrl">{{ exchangeRatesData.dataSource }}</span>
                     <span v-else-if="isUserCustomExchangeRates">{{ tt('User Custom') }}</span>
                 </small>
@@ -159,7 +159,7 @@ const {
     formatExchangeRateAmountToWesternArabicNumerals
 } = useI18n();
 
-const { showAlert, showToast } = useI18nUIComponents();
+const { showAlert, showToast, openExternalUrl } = useI18nUIComponents();
 
 const {
     baseCurrency,
@@ -309,8 +309,7 @@ exchangeRatesStore.getLatestExchangeRates({
         const exchangeRates = exchangeRatesData.value.exchangeRates;
         let hasBaseCurrency = false;
 
-        for (let i = 0; i < exchangeRates.length; i++) {
-            const exchangeRate = exchangeRates[i];
+        for (const exchangeRate of exchangeRates) {
             if (exchangeRate.currency === baseCurrency.value) {
                 hasBaseCurrency = true;
                 break;

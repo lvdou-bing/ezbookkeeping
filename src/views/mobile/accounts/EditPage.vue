@@ -1,11 +1,11 @@
 <template>
     <f7-page @page:afterin="onPageAfterIn">
         <f7-navbar>
-            <f7-nav-left :back-link="tt('Back')"></f7-nav-left>
+            <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
             <f7-nav-title :title="tt(title)"></f7-nav-title>
-            <f7-nav-right>
+            <f7-nav-right :class="{ 'navbar-compact-icons': true, 'disabled': loading }">
                 <f7-link icon-f7="ellipsis" :class="{ 'disabled': account.type !== AccountType.MultiSubAccounts.type }" @click="showMoreActionSheet = true"></f7-link>
-                <f7-link :class="{ 'disabled': inputIsEmpty || submitting }" :text="tt(saveButtonTitle)" @click="save"></f7-link>
+                <f7-link icon-f7="checkmark_alt" :class="{ 'disabled': inputIsEmpty || submitting }" @click="save"></f7-link>
             </f7-nav-right>
         </f7-navbar>
 
@@ -233,8 +233,10 @@
                     </div>
                 </template>
                 <date-time-selection-sheet :init-mode="accountContext.balanceDateTimeSheetMode"
+                                           :timezone-utc-offset="getDefaultTimezoneOffsetMinutes(account)"
+                                           :model-value="account.balanceTime"
                                            v-model:show="accountContext.showBalanceDateTimeSheet"
-                                           v-model="account.balanceTime">
+                                           @update:model-value="updateAccountBalanceTime(account, $event)">
                 </date-time-selection-sheet>
             </f7-list-item>
 
@@ -370,7 +372,7 @@
                     <template #default>
                         <div class="grid grid-cols-2">
                             <div class="list-item-subitem no-chevron">
-                                <a class="item-link" href="#" @click="subAccountContexts[idx].showIconSelectionSheet = true">
+                                <a class="item-link" href="#" @click="subAccountContexts[idx]!.showIconSelectionSheet = true">
                                     <div class="item-content">
                                         <div class="item-inner">
                                             <div class="item-header">
@@ -387,12 +389,12 @@
 
                                 <icon-selection-sheet :all-icon-infos="ALL_ACCOUNT_ICONS"
                                                       :color="subAccount.color"
-                                                      v-model:show="subAccountContexts[idx].showIconSelectionSheet"
+                                                      v-model:show="subAccountContexts[idx]!.showIconSelectionSheet"
                                                       v-model="subAccount.icon"
                                 ></icon-selection-sheet>
                             </div>
                             <div class="list-item-subitem no-chevron">
-                                <a class="item-link" href="#" @click="subAccountContexts[idx].showColorSelectionSheet = true">
+                                <a class="item-link" href="#" @click="subAccountContexts[idx]!.showColorSelectionSheet = true">
                                     <div class="item-content">
                                         <div class="item-inner">
                                             <div class="item-header">
@@ -408,7 +410,7 @@
                                 </a>
 
                                 <color-selection-sheet :all-color-infos="ALL_ACCOUNT_COLORS"
-                                                       v-model:show="subAccountContexts[idx].showColorSelectionSheet"
+                                                       v-model:show="subAccountContexts[idx]!.showColorSelectionSheet"
                                                        v-model="subAccount.color"
                                 ></color-selection-sheet>
                             </div>
@@ -422,7 +424,7 @@
                     :class="{ 'disabled': editAccountId && !isNewAccount(subAccount) }"
                     :header="tt('Currency')"
                     :no-chevron="!!editAccountId && !isNewAccount(subAccount)"
-                    @click="subAccountContexts[idx].showCurrencyPopup = true"
+                    @click="subAccountContexts[idx]!.showCurrencyPopup = true"
                 >
                     <template #title>
                         <div class="no-padding no-margin">
@@ -438,7 +440,7 @@
                                                :filter-placeholder="tt('Currency')"
                                                :filter-no-items-text="tt('No results')"
                                                :items="allCurrencies"
-                                               v-model:show="subAccountContexts[idx].showCurrencyPopup"
+                                               v-model:show="subAccountContexts[idx]!.showCurrencyPopup"
                                                v-model="subAccount.currency">
                     </list-item-selection-popup>
                 </f7-list-item>
@@ -449,13 +451,13 @@
                     :class="{ 'disabled': editAccountId && !isNewAccount(subAccount) }"
                     :header="account.isLiability ? tt('Sub-account Outstanding Balance') : tt('Sub-account Balance')"
                     :title="formatAccountDisplayBalance(subAccount)"
-                    @click="subAccountContexts[idx].showBalanceSheet = true"
+                    @click="subAccountContexts[idx]!.showBalanceSheet = true"
                 >
                     <number-pad-sheet :min-value="TRANSACTION_MIN_AMOUNT"
                                       :max-value="TRANSACTION_MAX_AMOUNT"
                                       :currency="subAccount.currency"
                                       :flip-negative="account.isLiability"
-                                      v-model:show="subAccountContexts[idx].showBalanceSheet"
+                                      v-model:show="subAccountContexts[idx]!.showBalanceSheet"
                                       v-model="subAccount.balance"
                     ></number-pad-sheet>
                 </f7-list-item>
@@ -467,16 +469,18 @@
                     v-if="!editAccountId || isNewAccount(subAccount)"
                 >
                     <template #header>
-                        <div class="account-edit-balancetime-header" @click="showDateTimeDialog(subAccountContexts[idx], 'time')">{{ tt('Sub-account Balance Time') }}</div>
+                        <div class="account-edit-balancetime-header" @click="showDateTimeDialog(subAccountContexts[idx] as AccountContext, 'time')">{{ tt('Sub-account Balance Time') }}</div>
                     </template>
                     <template #title>
                         <div class="account-edit-balancetime-title">
-                            <div @click="showDateTimeDialog(subAccountContexts[idx], 'date')">{{ formatAccountBalanceDate(subAccount) }}</div>&nbsp;<div class="account-edit-balancetime-time" @click="showDateTimeDialog(subAccountContexts[idx], 'time')">{{ formatAccountBalanceTime(subAccount) }}</div>
+                            <div @click="showDateTimeDialog(subAccountContexts[idx] as AccountContext, 'date')">{{ formatAccountBalanceDate(subAccount) }}</div>&nbsp;<div class="account-edit-balancetime-time" @click="showDateTimeDialog(subAccountContexts[idx] as AccountContext, 'time')">{{ formatAccountBalanceTime(subAccount) }}</div>
                         </div>
                     </template>
-                    <date-time-selection-sheet :init-mode="subAccountContexts[idx].balanceDateTimeSheetMode"
-                                               v-model:show="subAccountContexts[idx].showBalanceDateTimeSheet"
-                                               v-model="subAccount.balanceTime">
+                    <date-time-selection-sheet :init-mode="subAccountContexts[idx]!.balanceDateTimeSheetMode"
+                                               :timezone-utc-offset="getDefaultTimezoneOffsetMinutes(subAccount)"
+                                               :model-value="subAccount.balanceTime"
+                                               v-model:show="subAccountContexts[idx]!.showBalanceDateTimeSheet"
+                                               @update:model-value="updateAccountBalanceTime(subAccount, $event)">
                     </date-time-selection-sheet>
                 </f7-list-item>
 
@@ -522,10 +526,11 @@ import type { Router } from 'framework7/types';
 
 import { useI18n } from '@/locales/helpers.ts';
 import { useI18nUIComponents, showLoading, hideLoading } from '@/lib/ui/mobile.ts';
-import { useAccountEditPageBaseBase } from '@/views/base/accounts/AccountEditPageBase.ts';
+import { useAccountEditPageBase } from '@/views/base/accounts/AccountEditPageBase.ts';
 
 import { useAccountsStore } from '@/stores/account.ts';
 
+import { itemAndIndex } from '@/core/base.ts';
 import type { LocalizedCurrencyInfo } from '@/core/currency.ts';
 import { AccountType } from '@/core/account.ts';
 import { ALL_ACCOUNT_ICONS } from '@/consts/icon.ts';
@@ -537,8 +542,7 @@ import { isDefined, findDisplayNameByType } from '@/lib/common.ts';
 import { generateRandomUUID } from '@/lib/misc.ts';
 import {
     getTimezoneOffsetMinutes,
-    getBrowserTimezoneOffsetMinutes,
-    getActualUnixTimeForStore
+    parseDateTimeFromUnixTimeWithTimezoneOffset
 } from '@/lib/datetime.ts';
 
 interface AccountContext {
@@ -560,8 +564,8 @@ const {
     tt,
     getAllCurrencies,
     getCurrencyName,
-    formatUnixTimeToLongDate,
-    formatUnixTimeToLongTime,
+    formatDateTimeToLongDate,
+    formatDateTimeToLongTime,
     formatAmountToLocalizedNumeralsWithCurrency
 } = useI18n();
 
@@ -575,18 +579,19 @@ const {
     account,
     subAccounts,
     title,
-    saveButtonTitle,
     inputEmptyProblemMessage,
     inputIsEmpty,
     allAccountCategories,
     allAccountTypes,
     allAvailableMonthDays,
     isAccountSupportCreditCardStatementDate,
+    getDefaultTimezoneOffsetMinutes,
     getAccountCreditCardStatementDate,
+    updateAccountBalanceTime,
     isNewAccount,
     addSubAccount,
     setAccount
-} = useAccountEditPageBaseBase();
+} = useAccountEditPageBase();
 
 const accountsStore = useAccountsStore();
 
@@ -621,7 +626,8 @@ function formatAccountBalanceDate(account: Account): string {
         return '';
     }
 
-    return formatUnixTimeToLongDate(getActualUnixTimeForStore(account.balanceTime, getTimezoneOffsetMinutes(), getBrowserTimezoneOffsetMinutes()));
+    const dateTime = parseDateTimeFromUnixTimeWithTimezoneOffset(account.balanceTime, getTimezoneOffsetMinutes(account.balanceTime));
+    return formatDateTimeToLongDate(dateTime);
 }
 
 function formatAccountBalanceTime(account: Account): string {
@@ -629,7 +635,8 @@ function formatAccountBalanceTime(account: Account): string {
         return '';
     }
 
-    return formatUnixTimeToLongTime(getActualUnixTimeForStore(account.balanceTime, getTimezoneOffsetMinutes(), getBrowserTimezoneOffsetMinutes()));
+    const dateTime = parseDateTimeFromUnixTimeWithTimezoneOffset(account.balanceTime, getTimezoneOffsetMinutes(account.balanceTime));
+    return formatDateTimeToLongTime(dateTime);
 }
 
 function init(): void {
@@ -709,14 +716,14 @@ function addSubAccountAndContext(): void {
     }
 }
 
-function removeSubAccount(subAccount: Account | null, confirm: boolean): void {
-    if (!subAccount) {
+function removeSubAccount(currentSubAccount: Account | null, confirm: boolean): void {
+    if (!currentSubAccount) {
         showAlert('An error occurred');
         return;
     }
 
     if (!confirm) {
-        subAccountToDelete.value = subAccount;
+        subAccountToDelete.value = currentSubAccount;
         showDeleteActionSheet.value = true;
         return;
     }
@@ -724,10 +731,10 @@ function removeSubAccount(subAccount: Account | null, confirm: boolean): void {
     showDeleteActionSheet.value = false;
     subAccountToDelete.value = null;
 
-    for (let i = 0; i < subAccounts.value.length; i++) {
-        if (subAccounts.value[i] === subAccount) {
-            subAccounts.value.splice(i, 1);
-            subAccountContexts.value.splice(i, 1);
+    for (const [subAccount, index] of itemAndIndex(subAccounts.value)) {
+        if (subAccount === currentSubAccount) {
+            subAccounts.value.splice(index, 1);
+            subAccountContexts.value.splice(index, 1);
         }
     }
 }

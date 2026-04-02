@@ -9,6 +9,7 @@ import SignUpPage from '@/views/desktop/SignupPage.vue';
 import VerifyEmailPage from '@/views/desktop/VerifyEmailPage.vue';
 import ForgetPasswordPage from '@/views/desktop/ForgetPasswordPage.vue';
 import ResetPasswordPage from '@/views/desktop/ResetPasswordPage.vue';
+import OAuth2CallbackPage from '@/views/desktop/OAuth2CallbackPage.vue';
 import UnlockPage from '@/views/desktop/UnlockPage.vue';
 
 import HomePage from '@/views/desktop/HomePage.vue';
@@ -16,6 +17,8 @@ import HomePage from '@/views/desktop/HomePage.vue';
 import TransactionListPage from '@/views/desktop/transactions/ListPage.vue';
 
 import StatisticsTransactionPage from '@/views/desktop/statistics/TransactionPage.vue';
+
+import InsightsExplorerPage from '@/views/desktop/insights/ExplorerPage.vue';
 
 import AccountListPage from '@/views/desktop/accounts/ListPage.vue';
 
@@ -110,8 +113,7 @@ const router = createRouter({
                         initType: route.query['type'],
                         initCategoryIds: route.query['categoryIds'],
                         initAccountIds: route.query['accountIds'],
-                        initTagIds: route.query['tagIds'],
-                        initTagFilterType: route.query['tagFilterType'],
+                        initTagFilter: route.query['tagFilter'],
                         initAmountFilter: route.query['amountFilter'],
                         initKeyword: route.query['keyword']
                     })
@@ -129,11 +131,23 @@ const router = createRouter({
                         initEndTime: route.query['endTime'],
                         initFilterAccountIds: route.query['filterAccountIds'],
                         initFilterCategoryIds: route.query['filterCategoryIds'],
-                        initTagIds: route.query['tagIds'],
-                        initTagFilterType: route.query['tagFilterType'],
+                        initTagFilter: route.query['tagFilter'],
                         initKeyword: route.query['keyword'],
                         initSortingType: route.query['sortingType'],
-                        initTrendDateAggregationType: route.query['trendDateAggregationType']
+                        initTrendDateAggregationType: route.query['trendDateAggregationType'],
+                        initAssetTrendsDateAggregationType: route.query['assetTrendsDateAggregationType']
+                    })
+                },
+                {
+                    path: '/insights/explorer',
+                    component: InsightsExplorerPage,
+                    beforeEnter: checkLogin,
+                    props: route => ({
+                        initId: route.query['id'],
+                        initActiveTab: route.query['activeTab'],
+                        initDateRangeType: route.query['dateRangeType'],
+                        initStartTime: route.query['startTime'],
+                        initEndTime: route.query['endTime']
                     })
                 },
                 {
@@ -224,6 +238,18 @@ const router = createRouter({
             component: ResetPasswordPage,
             props: route => ({
                 token: route.query['token']
+            })
+        },
+        {
+            path: '/oauth2_callback',
+            component: OAuth2CallbackPage,
+            props: route => ({
+                token: route.query['token'],
+                provider: route.query['provider'],
+                platform: route.query['platform'],
+                userName: route.query['userName'],
+                errorCode: route.query['errorCode'],
+                errorMessage: route.query['errorMessage']
             })
         },
         {

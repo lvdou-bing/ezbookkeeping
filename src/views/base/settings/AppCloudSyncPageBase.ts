@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 
 import { useSettingsStore } from '@/stores/setting.ts';
 
+import { keysIfValueEquals } from '@/core/base.ts';
 import type { ApplicationCloudSetting } from '@/core/setting.ts';
 
 export interface CategorizedApplicationCloudSettingItems {
@@ -12,6 +13,7 @@ export interface CategorizedApplicationCloudSettingItems {
 
 export interface ApplicationCloudSettingItem {
     readonly settingKey: string;
+    readonly relatedSettingKeys?: string[];
     readonly settingName: string;
     readonly mobile: boolean;
     readonly desktop: boolean;
@@ -21,7 +23,14 @@ export const ALL_APPLICATION_CLOUD_SETTINGS: CategorizedApplicationCloudSettingI
     {
         categoryName: 'Basic Settings',
         items: [
-            { settingKey: 'showAccountBalance', settingName: 'Show Account Balance', mobile: true, desktop: true }
+            { settingKey: 'showAccountBalance', settingName: 'Show Account Balance', mobile: true, desktop: true },
+            { settingKey: 'autoUpdateExchangeRatesData', settingName: 'Auto-update Exchange Rates Data', mobile: true, desktop: true }
+        ]
+    },
+    {
+        categoryName: 'Navigation Bar',
+        items: [
+            { settingKey: 'showAddTransactionButtonInDesktopNavbar', settingName: 'Show Add Transaction Button', mobile: false, desktop: true }
         ]
     },
     {
@@ -38,27 +47,51 @@ export const ALL_APPLICATION_CLOUD_SETTINGS: CategorizedApplicationCloudSettingI
         items: [
             { settingKey: 'itemsCountInTransactionListPage', settingName: 'Transactions Per Page', mobile: false, desktop: true },
             { settingKey: 'showTotalAmountInTransactionListPage', settingName: 'Show Monthly Total Amount', mobile: true, desktop: true },
-            { settingKey: 'showTagInTransactionListPage', settingName: 'Show Transaction Tag', mobile: true, desktop: true }
+            { settingKey: 'showTagInTransactionListPage', settingName: 'Show Transaction Tags', mobile: true, desktop: true }
         ]
     },
     {
         categoryName: 'Transaction Edit Page',
         items: [
+            { settingKey: 'quickSaveButtonStyleInMobileTransactionListPage', settingName: 'Quick Save Button Style', mobile: true, desktop: false },
+            { settingKey: 'quickAddButtonActionInMobileTransactionEditPage', settingName: 'Quick Add Button Action', mobile: true, desktop: false },
             { settingKey: 'autoSaveTransactionDraft', settingName: 'Automatically Save Draft', mobile: true, desktop: true },
             { settingKey: 'autoGetCurrentGeoLocation', settingName: 'Automatically Add Geolocation', mobile: true, desktop: true },
             { settingKey: 'alwaysShowTransactionPicturesInMobileTransactionEditPage', settingName: 'Always Show Transaction Pictures', mobile: true, desktop: false }
         ]
     },
     {
+        categoryName: 'Import Transaction Dialog',
+        items: [
+            { settingKey: 'rememberLastSelectedFileTypeInImportTransactionDialog', relatedSettingKeys: ['lastSelectedFileTypeInImportTransactionDialog'], settingName: 'Remember Last Selected File Type', mobile: false, desktop: true }
+        ]
+    },
+    {
+        categoryName: 'Insights Explorer Page',
+        items: [
+            { settingKey: 'insightsExplorerDefaultDateRangeType', settingName: 'Default Date Range', mobile: false, desktop: true },
+            { settingKey: 'showTagInInsightsExplorerPage', settingName: 'Show Transaction Tags', mobile: false, desktop: true }
+        ]
+    },
+    {
         categoryName: 'Account List Page',
         items: [
             { settingKey: 'totalAmountExcludeAccountIds', settingName: 'Accounts Included in Total', mobile: true, desktop: true },
+            { settingKey: 'accountCategoryOrders', settingName: 'Account Category Order', mobile: true, desktop: true },
+            { settingKey: 'hideCategoriesWithoutAccounts', settingName: 'Hide Categories Without Accounts', mobile: false, desktop: true }
         ]
     },
     {
         categoryName: 'Exchange Rates Data Page',
         items: [
             { settingKey: 'currencySortByInExchangeRatesPage', settingName: 'Sort by', mobile: true, desktop: true }
+        ]
+    },
+    {
+        categoryName: 'Browser Cache Management',
+        items: [
+            { settingKey: 'mapCacheExpiration', settingName: 'Cache Expiration for Map Data', mobile: true, desktop: true },
+            { settingKey: 'exchangeRatesDataCacheExpiration', settingName: 'Cache Expiration for Exchange Rates Data', mobile: true, desktop: true }
         ]
     },
     {
@@ -87,6 +120,14 @@ export const ALL_APPLICATION_CLOUD_SETTINGS: CategorizedApplicationCloudSettingI
             { settingKey: 'statistics.defaultTrendChartType', settingName: 'Default Chart Type', mobile: false, desktop: true },
             { settingKey: 'statistics.defaultTrendChartDataRangeType', settingName: 'Default Date Range', mobile: true, desktop: true }
         ]
+    },
+    {
+        categoryName: 'Statistics Settings',
+        categorySubName: 'Asset Trends Settings',
+        items: [
+            { settingKey: 'statistics.defaultAssetTrendsChartType', settingName: 'Default Chart Type', mobile: false, desktop: true },
+            { settingKey: 'statistics.defaultAssetTrendsChartDataRangeType', settingName: 'Default Date Range', mobile: true, desktop: true }
+        ]
     }
 ];
 
@@ -101,14 +142,8 @@ export function useAppCloudSyncBase() {
     const isEnableCloudSync = computed<boolean>(() => settingsStore.enableApplicationCloudSync);
 
     const hasEnabledApplicationCloudSettings = computed<boolean>(() => {
-        for (const key in enabledApplicationCloudSettings.value) {
-            if (!Object.prototype.hasOwnProperty.call(enabledApplicationCloudSettings.value, key)) {
-                continue;
-            }
-
-            if (enabledApplicationCloudSettings.value[key]) {
-                return true;
-            }
+        for (const _ of keysIfValueEquals(enabledApplicationCloudSettings.value, true)) {
+            return true;
         }
 
         return false;
@@ -117,22 +152,15 @@ export function useAppCloudSyncBase() {
     const enabledApplicationCloudSettingKeys = computed<string[]>(() => {
         const keys: string[] = [];
 
-        for (const key in enabledApplicationCloudSettings.value) {
-            if (!Object.prototype.hasOwnProperty.call(enabledApplicationCloudSettings.value, key)) {
-                continue;
-            }
-
-            if (enabledApplicationCloudSettings.value[key]) {
-                keys.push(key);
-            }
+        for (const key of keysIfValueEquals(enabledApplicationCloudSettings.value, true)) {
+            keys.push(key);
         }
 
         return keys;
     });
 
     function isAllSettingsSelected(categorizedItems: CategorizedApplicationCloudSettingItems): boolean {
-        for (let i = 0; i < categorizedItems.items.length; i++) {
-            const item = categorizedItems.items[i];
+        for (const item of categorizedItems.items) {
             if (!enabledApplicationCloudSettings.value[item.settingKey]) {
                 return false;
             }
@@ -144,8 +172,7 @@ export function useAppCloudSyncBase() {
     function hasSettingSelectedButNotAllChecked(categorizedItems: CategorizedApplicationCloudSettingItems): boolean {
         let checkedCount = 0;
 
-        for (let i = 0; i < categorizedItems.items.length; i++) {
-            const item = categorizedItems.items[i];
+        for (const item of categorizedItems.items) {
             if (!enabledApplicationCloudSettings.value[item.settingKey]) {
                 checkedCount++;
             }
@@ -155,41 +182,66 @@ export function useAppCloudSyncBase() {
     }
 
     function updateSettingsSelected(categorizedItems: CategorizedApplicationCloudSettingItems, value: boolean): void {
-        for (let i = 0; i < categorizedItems.items.length; i++) {
-            const item = categorizedItems.items[i];
+        for (const item of categorizedItems.items) {
             enabledApplicationCloudSettings.value[item.settingKey] = value;
+
+            if (item.relatedSettingKeys) {
+                for (const relatedKey of item.relatedSettingKeys) {
+                    enabledApplicationCloudSettings.value[relatedKey] = value;
+                }
+            }
+        }
+    }
+
+    function updateSettingSelected(settingItem: ApplicationCloudSettingItem, value: boolean): void {
+        enabledApplicationCloudSettings.value[settingItem.settingKey] = value;
+
+        if (settingItem.relatedSettingKeys) {
+            for (const relatedKey of settingItem.relatedSettingKeys) {
+                enabledApplicationCloudSettings.value[relatedKey] = value;
+            }
         }
     }
 
     function selectAllSettings(): void {
-        for (let i = 0; i < ALL_APPLICATION_CLOUD_SETTINGS.length; i++) {
-            const categorizedItems = ALL_APPLICATION_CLOUD_SETTINGS[i];
-
-            for (let j = 0; j < categorizedItems.items.length; j++) {
-                const item = categorizedItems.items[j];
+        for (const categorizedItems of ALL_APPLICATION_CLOUD_SETTINGS) {
+            for (const item of categorizedItems.items) {
                 enabledApplicationCloudSettings.value[item.settingKey] = true;
+
+                if (item.relatedSettingKeys) {
+                    for (const relatedKey of item.relatedSettingKeys) {
+                        enabledApplicationCloudSettings.value[relatedKey] = true;
+                    }
+                }
             }
         }
     }
 
     function selectNoneSettings(): void {
-        for (let i = 0; i < ALL_APPLICATION_CLOUD_SETTINGS.length; i++) {
-            const categorizedItems = ALL_APPLICATION_CLOUD_SETTINGS[i];
-
-            for (let j = 0; j < categorizedItems.items.length; j++) {
-                const item = categorizedItems.items[j];
+        for (const categorizedItems of ALL_APPLICATION_CLOUD_SETTINGS) {
+            for (const item of categorizedItems.items) {
                 enabledApplicationCloudSettings.value[item.settingKey] = false;
+
+                if (item.relatedSettingKeys) {
+                    for (const relatedKey of item.relatedSettingKeys) {
+                        enabledApplicationCloudSettings.value[relatedKey] = false;
+                    }
+                }
             }
         }
     }
 
     function selectInvertSettings(): void {
-        for (let i = 0; i < ALL_APPLICATION_CLOUD_SETTINGS.length; i++) {
-            const categorizedItems = ALL_APPLICATION_CLOUD_SETTINGS[i];
+        for (const categorizedItems of ALL_APPLICATION_CLOUD_SETTINGS) {
+            for (const item of categorizedItems.items) {
+                const newValue = !enabledApplicationCloudSettings.value[item.settingKey];
+                enabledApplicationCloudSettings.value[item.settingKey] = newValue;
 
-            for (let j = 0; j < categorizedItems.items.length; j++) {
-                const item = categorizedItems.items[j];
-                enabledApplicationCloudSettings.value[item.settingKey] = !enabledApplicationCloudSettings.value[item.settingKey];
+                if (item.relatedSettingKeys) {
+                    for (const relatedKey of item.relatedSettingKeys) {
+                        enabledApplicationCloudSettings.value[relatedKey] = newValue;
+                    }
+                }
             }
         }
     }
@@ -198,8 +250,7 @@ export function useAppCloudSyncBase() {
         if (settings && settings.length > 0) {
             settingsStore.setApplicationSettingsFromCloudSettings(settings);
 
-            for (let i = 0; i < settings.length; i++) {
-                const setting = settings[i];
+            for (const setting of settings) {
                 if (setting && setting.settingKey) {
                     enabledApplicationCloudSettings.value[setting.settingKey] = true;
                 }
@@ -226,6 +277,7 @@ export function useAppCloudSyncBase() {
         isAllSettingsSelected,
         hasSettingSelectedButNotAllChecked,
         updateSettingsSelected,
+        updateSettingSelected,
         selectAllSettings,
         selectNoneSettings,
         selectInvertSettings,

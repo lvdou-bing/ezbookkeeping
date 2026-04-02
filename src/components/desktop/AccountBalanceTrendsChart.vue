@@ -8,11 +8,15 @@ import { useTheme } from 'vuetify';
 import type { CallbackDataParams } from 'echarts/types/dist/shared';
 
 import { useI18n } from '@/locales/helpers.ts';
-import { type CommonAccountBalanceTrendsChartProps, useAccountBalanceTrendsChartBase } from '@/components/base/AccountBalanceTrendsChartBase.ts'
+import {
+    type AccountBalanceTrendsChartItem,
+    type CommonAccountBalanceTrendsChartProps,
+    useAccountBalanceTrendsChartBase
+} from '@/components/base/AccountBalanceTrendsChartBase.ts'
 
 import { useUserStore } from '@/stores/user.ts';
 
-import type { NameValue } from '@/core/base.ts';
+import { type NameValue, itemAndIndex } from '@/core/base.ts';
 import { TextDirection } from '@/core/text.ts';
 import type { ColorStyleValue } from '@/core/color.ts';
 import { ThemeType } from '@/core/theme.ts';
@@ -74,6 +78,9 @@ const allSeries = computed<AccountBalanceTrendsChartDataItem[]>(() => {
         series.areaStyle = {};
     } else if (props.type === AccountBalanceTrendChartType.Column.type) {
         series.type = 'bar';
+    } else if (props.type === AccountBalanceTrendChartType.Boxplot.type) {
+        series.type = 'boxplot';
+        series.itemStyle.borderColor = series.itemStyle.color;
     } else if (props.type === AccountBalanceTrendChartType.Candlestick.type) {
         const expenseIncomeAmountColor = getExpenseAndIncomeAmountColor(userStore.currentUserExpenseAmountColor, userStore.currentUserIncomeAmountColor, isDarkMode.value);
         series.type = 'candlestick';
@@ -83,10 +90,16 @@ const allSeries = computed<AccountBalanceTrendsChartDataItem[]>(() => {
         series.itemStyle.borderColor0 = expenseIncomeAmountColor.expenseAmountColor;
     }
 
-    for (let i = 0; i < allDataItems.value.length; i++) {
-        const item = allDataItems.value[i];
-
-        if (props.type === AccountBalanceTrendChartType.Candlestick.type) {
+    for (const item of allDataItems.value) {
+        if (props.type === AccountBalanceTrendChartType.Boxplot.type) {
+            series.data.push([
+                item.minimumBalance,
+                item.q1Balance,
+                item.medianBalance,
+                item.q3Balance,
+                item.maximumBalance
+            ]);
+        } else if (props.type === AccountBalanceTrendChartType.Candlestick.type) {
             series.data.push([
                 item.openingBalance,
                 item.closingBalance,
@@ -110,23 +123,28 @@ const yAxisWidth = computed<number>(() => {
         return width;
     }
 
-    for (let i = 0; i < allSeries.value.length; i++) {
-        for (let j = 0; j < allSeries.value[i].data.length; j++) {
-            const data = allSeries.value[i].data[j];
-            let value: number;
+    for (const series of allSeries.value) {
+        for (const data of series.data) {
+            let currentMinValue: number;
+            let currentMaxValue: number;
 
-            if (isArray(data)) {
-                value = data[1]; // for candlestick, use closing balance
+            if (isArray(data) && props.type === AccountBalanceTrendChartType.Boxplot.type) {
+                currentMinValue = data[0] as number;
+                currentMaxValue = data[4] as number;
+            } else if (isArray(data) && props.type === AccountBalanceTrendChartType.Candlestick.type) {
+                currentMinValue = data[2] as number;
+                currentMaxValue = data[3] as number;
             } else {
-                value = data as number; // for line or bar chart
+                currentMinValue = data as number;
+                currentMaxValue = data as number;
             }
 
-            if (value > maxValue) {
-                maxValue = value;
+            if (currentMaxValue > maxValue) {
+                maxValue = currentMaxValue;
             }
 
-            if (value < minValue) {
-                minValue = value;
+            if (currentMinValue < minValue) {
+                minValue = currentMinValue;
             }
         }
     }
@@ -171,9 +189,56 @@ const chartOptions = computed<object>(() => {
                 color: isDarkMode.value ? '#eee' : '#333'
             },
             formatter: (params: CallbackDataParams[]) => {
-                if (props.type === AccountBalanceTrendChartType.Candlestick.type) {
-                    const dataIndex = params[0].dataIndex;
-                    const dataItem = allDataItems.value[dataIndex];
+                if (props.type === AccountBalanceTrendChartType.Boxplot.type) {
+                    const dataIndex = params[0]!.dataIndex;
+                    const dataItem = allDataItems.value[dataIndex] as AccountBalanceTrendsChartItem;
+                    const displayItems: NameValue[] = [
+                        {
+                            name: tt('Minimum Balance'),
+                            value: formatAmountToLocalizedNumeralsWithCurrency(dataItem.minimumBalance, props.account.currency)
+                        },
+                        {
+                            name: tt('Q1 Balance (First Quartile)'),
+                            value: formatAmountToLocalizedNumeralsWithCurrency(dataItem.q1Balance, props.account.currency)
+                        },
+                        {
+                            name: tt('Median Balance'),
+                            value: formatAmountToLocalizedNumeralsWithCurrency(dataItem.medianBalance, props.account.currency)
+                        },
+                        {
+                            name: tt('Q3 Balance (Third Quartile)'),
+                            value: formatAmountToLocalizedNumeralsWithCurrency(dataItem.q3Balance, props.account.currency)
+                        },
+                        {
+                            name: tt('Maximum Balance'),
+                            value: formatAmountToLocalizedNumeralsWithCurrency(dataItem.maximumBalance, props.account.currency)
+                        },
+                        {
+                            name: tt('Opening Balance'),
+                            value: formatAmountToLocalizedNumeralsWithCurrency(dataItem.openingBalance, props.account.currency)
+                        },
+                        {
+                            name: tt('Closing Balance'),
+                            value: formatAmountToLocalizedNumeralsWithCurrency(dataItem.closingBalance, props.account.currency)
+                        }
+                    ];
+
+                    let tooltip = `${params[0]!.name} ${props.legendName}<br/>`;
+
+                    for (const [displayItem, index] of itemAndIndex(displayItems)) {
+                        if (index === 5) {
+                            tooltip += '<div style="border-bottom: ' + (isDarkMode.value ? '#eee' : '#333') + ' dashed 1px"></div>';
+                        }
+
+                        tooltip += `<div><span class="chart-pointer" style="background-color: #${DEFAULT_CHART_COLORS[index]}"></span>`
+                            + `<span>${displayItem.name}</span><span class="ms-5" style="float: inline-end">${displayItem.value}</span>`
+                            + `</div>`;
+                    }
+
+                    return tooltip;
+                } else if (props.type === AccountBalanceTrendChartType.Candlestick.type) {
+                    const dataIndex = params[0]!.dataIndex;
+                    const dataItem = allDataItems.value[dataIndex] as AccountBalanceTrendsChartItem;
                     const displayItems: NameValue[] = [
                         {
                             name: tt('Opening Balance'),
@@ -201,41 +266,51 @@ const chartOptions = computed<object>(() => {
                         }
                     ];
 
-                    let tooltip = `${params[0].name} ${props.legendName}<br/>`;
+                    let tooltip = `${params[0]!.name} ${props.legendName}<br/>`;
 
-                    for (let i = 0; i < displayItems.length; i++) {
-                        tooltip += `<div><span class="chart-pointer" style="background-color: #${DEFAULT_CHART_COLORS[i]}"></span>`
-                            + `<span>${displayItems[i].name}</span><span class="ms-5" style="float: inline-end">${displayItems[i].value}</span><br/>`
+                    for (const [displayItem, index] of itemAndIndex(displayItems)) {
+                        if (index === 4) {
+                            tooltip += '<div style="border-bottom: ' + (isDarkMode.value ? '#eee' : '#333') + ' dashed 1px"></div>';
+                        }
+
+                        tooltip += `<div><span class="chart-pointer" style="background-color: #${DEFAULT_CHART_COLORS[index]}"></span>`
+                            + `<span>${displayItem.name}</span><span class="ms-5" style="float: inline-end">${displayItem.value}</span>`
                             + `</div>`;
                     }
 
                     return tooltip;
                 } else {
-                    const amount = params[0].data as number;
+                    const amount = params[0]!.data as number;
                     const value = formatAmountToLocalizedNumeralsWithCurrency(amount, props.account.currency);
 
-                    return `${params[0].name}<br/>`
+                    return `${params[0]!.name}<br/>`
                         + '<div><span class="chart-pointer" style="background-color: #' + DEFAULT_CHART_COLORS[0] + '"></span>'
-                        + `<span>${props.legendName}</span><span class="ms-5" style="float: inline-end">${value}</span><br/>`
+                        + `<span>${props.legendName}</span><span class="ms-5" style="float: inline-end">${value}</span>`
                         + '</div>';
                 }
             }
         },
         grid: {
             left: yAxisWidth.value,
-            right: 20
+            right: 20,
+            top: 0,
+            bottom: 20
         },
         xAxis: [
             {
                 type: 'category',
                 data: allDisplayDateRanges.value,
-                inverse: textDirection.value === TextDirection.RTL
+                inverse: textDirection.value === TextDirection.RTL,
+                axisLabel: {
+                    color: isDarkMode.value ? '#888' : '#666'
+                }
             }
         ],
         yAxis: [
             {
                 type: 'value',
                 axisLabel: {
+                    color: isDarkMode.value ? '#888' : '#666',
                     formatter: (value: string) => {
                         return formatAmountToLocalizedNumeralsWithCurrency(parseInt(value), props.account.currency);
                     }
@@ -262,7 +337,7 @@ const chartOptions = computed<object>(() => {
 <style scoped>
 .account-balance-trends-chart-container {
     width: 100%;
-    height: 400px;
+    height: 418px;
     margin-top: 10px;
 }
 </style>

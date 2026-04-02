@@ -26,6 +26,7 @@ import Framework7Toggle from 'framework7/components/toggle';
 import Framework7Range from 'framework7/components/range';
 import Framework7Grid from 'framework7/components/grid';
 import Framework7Picker from 'framework7/components/picker';
+import Framework7Fab from 'framework7/components/fab';
 import Framework7InfiniteScroll from 'framework7/components/infinite-scroll';
 import Framework7PullToRefresh from 'framework7/components/pull-to-refresh';
 import Framework7Searchbar from 'framework7/components/searchbar';
@@ -42,7 +43,7 @@ import Framework7Vue, { registerComponents } from 'framework7-vue/bundle';
 import 'framework7-icons';
 import 'line-awesome/dist/line-awesome/css/line-awesome.css';
 
-import VueDatePicker from '@vuepic/vue-datepicker';
+import { VueDatePicker } from '@vuepic/vue-datepicker';
 import '@vuepic/vue-datepicker/dist/main.css';
 
 import { getI18nOptions } from '@/locales/helpers.ts';
@@ -56,7 +57,7 @@ import TransactionCalendar from '@/components/common/TransactionCalendar.vue';
 import ItemIcon from '@/components/mobile/ItemIcon.vue';
 import LanguageSelectButton from '@/components/mobile/LanguageSelectButton.vue';
 import PieChart from '@/components/mobile/PieChart.vue';
-import MonthlyTrendsBarChart from '@/components/mobile/MonthlyTrendsBarChart.vue';
+import TrendsBarChart from '@/components/mobile/TrendsBarChart.vue';
 import PinCodeInputSheet from '@/components/mobile/PinCodeInputSheet.vue';
 import PasswordInputSheet from '@/components/mobile/PasswordInputSheet.vue';
 import PasscodeInputSheet from '@/components/mobile/PasscodeInputSheet.vue';
@@ -79,6 +80,7 @@ import MapSheet from '@/components/mobile/MapSheet.vue';
 import TransactionTagSelectionSheet from '@/components/mobile/TransactionTagSelectionSheet.vue';
 import ScheduleFrequencySheet from '@/components/mobile/ScheduleFrequencySheet.vue';
 import AccountBalanceTrendsBarChart from '@/components/mobile/AccountBalanceTrendsBarChart.vue';
+import AIImageRecognitionSheet from '@/components/mobile/AIImageRecognitionSheet.vue';
 
 import TextareaAutoSize from '@/directives/mobile/textareaAutoSize.ts';
 
@@ -118,6 +120,7 @@ Framework7.use([
     Framework7Range,
     Framework7Grid,
     Framework7Picker,
+    Framework7Fab,
     Framework7InfiniteScroll,
     Framework7PullToRefresh,
     Framework7Searchbar,
@@ -149,7 +152,7 @@ app.component('TransactionCalendar', TransactionCalendar);
 app.component('ItemIcon', ItemIcon);
 app.component('LanguageSelectButton', LanguageSelectButton);
 app.component('PieChart', PieChart);
-app.component('MonthlyTrendsBarChart', MonthlyTrendsBarChart);
+app.component('TrendsBarChart', TrendsBarChart);
 app.component('PinCodeInputSheet', PinCodeInputSheet);
 app.component('PasswordInputSheet', PasswordInputSheet);
 app.component('PasscodeInputSheet', PasscodeInputSheet);
@@ -170,8 +173,9 @@ app.component('InformationSheet', InformationSheet);
 app.component('NumberPadSheet', NumberPadSheet);
 app.component('MapSheet', MapSheet);
 app.component('TransactionTagSelectionSheet', TransactionTagSelectionSheet);
-app.component('AccountBalanceTrendsBarChart', AccountBalanceTrendsBarChart);
 app.component('ScheduleFrequencySheet', ScheduleFrequencySheet);
+app.component('AccountBalanceTrendsBarChart', AccountBalanceTrendsBarChart);
+app.component('AIImageRecognitionSheet', AIImageRecognitionSheet);
 
 app.directive('TextareaAutoSize', TextareaAutoSize);
 

@@ -15,6 +15,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/mayswind/ezbookkeeping/pkg/api"
+	"github.com/mayswind/ezbookkeeping/pkg/auth/oauth2"
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/cron"
 	"github.com/mayswind/ezbookkeeping/pkg/errs"
@@ -72,6 +73,13 @@ func startWebServer(c *core.CliContext) error {
 		return err
 	}
 
+	err = oauth2.InitializeOAuth2Provider(config)
+
+	if err != nil {
+		log.BootErrorf(c, "[webserver.startWebServer] initializes oauth 2.0 provider failed, because %s", err.Error())
+		return err
+	}
+
 	err = cron.InitializeCronJobSchedulerContainer(c, config, true)
 
 	if err != nil {
@@ -104,9 +112,11 @@ func startWebServer(c *core.CliContext) error {
 		_ = v.RegisterValidation("notBlank", validators.NotBlank)
 		_ = v.RegisterValidation("validUsername", validators.ValidUsername)
 		_ = v.RegisterValidation("validEmail", validators.ValidEmail)
+		_ = v.RegisterValidation("validNickname", validators.ValidNickname)
 		_ = v.RegisterValidation("validCurrency", validators.ValidCurrency)
 		_ = v.RegisterValidation("validHexRGBColor", validators.ValidHexRGBColor)
 		_ = v.RegisterValidation("validAmountFilter", validators.ValidAmountFilter)
+		_ = v.RegisterValidation("validTagFilter", validators.ValidTagFilter)
 		_ = v.RegisterValidation("validFiscalYearStart", validators.ValidateFiscalYearStart)
 	}
 
@@ -167,7 +177,7 @@ func startWebServer(c *core.CliContext) error {
 
 	if config.AvatarProvider == core.USER_AVATAR_PROVIDER_INTERNAL {
 		avatarRoute := router.Group("/avatar")
-		avatarRoute.Use(bindMiddleware(middlewares.JWTAuthorizationByQueryString))
+		avatarRoute.Use(bindMiddleware(middlewares.JWTAuthorizationByQueryString(config)))
 		{
 			avatarRoute.GET("/:fileName", bindImage(api.Users.UserGetAvatarHandler))
 		}
@@ -175,7 +185,7 @@ func startWebServer(c *core.CliContext) error {
 
 	if config.EnableTransactionPictures {
 		pictureRoute := router.Group("/pictures")
-		pictureRoute.Use(bindMiddleware(middlewares.JWTAuthorizationByQueryString))
+		pictureRoute.Use(bindMiddleware(middlewares.JWTAuthorizationByQueryString(config)))
 		{
 			pictureRoute.GET("/:fileName", bindImage(api.TransactionPictures.TransactionPictureGetHandler))
 		}
@@ -184,7 +194,7 @@ func startWebServer(c *core.CliContext) error {
 	router.GET("/healthz.json", bindApi(api.Healths.HealthStatusHandler))
 
 	proxyRoute := router.Group("/proxy")
-	proxyRoute.Use(bindMiddleware(middlewares.JWTAuthorizationByQueryString))
+	proxyRoute.Use(bindMiddleware(middlewares.JWTAuthorizationByQueryString(config)))
 	{
 		if config.EnableMapDataFetchProxy {
 			if config.MapProvider == settings.OpenStreetMapProvider ||
@@ -208,7 +218,7 @@ func startWebServer(c *core.CliContext) error {
 
 	if config.MapProvider == settings.AmapProvider && config.AmapSecurityVerificationMethod == settings.AmapSecurityVerificationInternalProxyMethod {
 		amapApiProxyRoute := router.Group("/_AMapService")
-		amapApiProxyRoute.Use(bindMiddleware(middlewares.JWTAuthorizationByCookie))
+		amapApiProxyRoute.Use(bindMiddleware(middlewares.JWTAuthorizationByCookie(config)))
 		{
 			amapApiProxyRoute.GET("/*action", bindProxy(api.AmapApis.AmapApiProxyHandler))
 		}
@@ -226,7 +236,7 @@ func startWebServer(c *core.CliContext) error {
 		mcpRoute.Use(bindMiddleware(middlewares.RequestId(config)))
 		mcpRoute.Use(bindMiddleware(middlewares.RequestLog))
 		mcpRoute.Use(bindMiddleware(middlewares.MCPServerIpLimit(config)))
-		mcpRoute.Use(bindMiddleware(middlewares.JWTMCPAuthorization))
+		mcpRoute.Use(bindMiddleware(middlewares.JWTMCPAuthorization(config)))
 		{
 			mcpRoute.POST("", bindJSONRPCApi(map[string]core.JSONRPCApiHandlerFunc{
 				"initialize":     api.ModelContextProtocols.InitializeHandler,
@@ -242,23 +252,43 @@ func startWebServer(c *core.CliContext) error {
 		}
 	}
 
+	if config.EnableOAuth2Login {
+		oauth2Route := router.Group("/oauth2")
+		oauth2Route.Use(bindMiddleware(middlewares.RequestId(config)))
+		oauth2Route.Use(bindMiddleware(middlewares.RequestLog))
+		{
+			oauth2Route.GET("/login", bindRedirect(api.OAuth2Authentications.LoginHandler))
+			oauth2Route.GET("/callback", bindRedirect(api.OAuth2Authentications.CallbackHandler))
+		}
+	}
+
 	apiRoute := router.Group("/api")
 
 	apiRoute.Use(bindMiddleware(middlewares.RequestId(config)))
 	apiRoute.Use(bindMiddleware(middlewares.RequestLog))
 	{
-		apiRoute.POST("/authorize.json", bindApiWithTokenUpdate(api.Authorizations.AuthorizeHandler, config))
+		if config.EnableInternalAuth {
+			apiRoute.POST("/authorize.json", bindApiWithTokenUpdate(api.Authorizations.AuthorizeHandler, config))
+		}
 
-		if config.EnableTwoFactor {
+		if config.EnableInternalAuth && config.EnableTwoFactor {
 			twoFactorRoute := apiRoute.Group("/2fa")
-			twoFactorRoute.Use(bindMiddleware(middlewares.JWTTwoFactorAuthorization))
+			twoFactorRoute.Use(bindMiddleware(middlewares.JWTTwoFactorAuthorization(config)))
 			{
 				twoFactorRoute.POST("/authorize.json", bindApiWithTokenUpdate(api.Authorizations.TwoFactorAuthorizeHandler, config))
 				twoFactorRoute.POST("/recovery.json", bindApiWithTokenUpdate(api.Authorizations.TwoFactorAuthorizeByRecoveryCodeHandler, config))
 			}
 		}
 
-		if config.EnableUserRegister {
+		if config.EnableOAuth2Login {
+			oauth2Route := apiRoute.Group("/oauth2")
+			oauth2Route.Use(bindMiddleware(middlewares.JWTOAuth2CallbackAuthorization(config)))
+			{
+				oauth2Route.POST("/authorize.json", bindApiWithTokenUpdate(api.Authorizations.OAuth2CallbackAuthorizeHandler, config))
+			}
+		}
+
+		if config.EnableInternalAuth && config.EnableUserRegister {
 			apiRoute.POST("/register.json", bindApiWithTokenUpdate(api.Users.UserRegisterHandler, config))
 		}
 
@@ -266,17 +296,17 @@ func startWebServer(c *core.CliContext) error {
 			apiRoute.POST("/verify_email/resend.json", bindApi(api.Users.UserSendVerifyEmailByUnloginUserHandler))
 
 			emailVerifyRoute := apiRoute.Group("/verify_email")
-			emailVerifyRoute.Use(bindMiddleware(middlewares.JWTEmailVerifyAuthorization))
+			emailVerifyRoute.Use(bindMiddleware(middlewares.JWTEmailVerifyAuthorization(config)))
 			{
 				emailVerifyRoute.POST("/by_token.json", bindApi(api.Users.UserEmailVerifyHandler))
 			}
 		}
 
-		if config.EnableUserForgetPassword {
+		if config.EnableInternalAuth && config.EnableUserForgetPassword {
 			apiRoute.POST("/forget_password/request.json", bindApi(api.ForgetPasswords.UserForgetPasswordRequestHandler))
 
 			resetPasswordRoute := apiRoute.Group("/forget_password/reset")
-			resetPasswordRoute.Use(bindMiddleware(middlewares.JWTResetPasswordAuthorization))
+			resetPasswordRoute.Use(bindMiddleware(middlewares.JWTResetPasswordAuthorization(config)))
 			{
 				resetPasswordRoute.POST("/by_token.json", bindApi(api.ForgetPasswords.UserResetPasswordHandler))
 			}
@@ -285,10 +315,12 @@ func startWebServer(c *core.CliContext) error {
 		apiRoute.GET("/logout.json", bindApiWithTokenUpdate(api.Tokens.TokenRevokeCurrentHandler, config))
 
 		apiV1Route := apiRoute.Group("/v1")
-		apiV1Route.Use(bindMiddleware(middlewares.JWTAuthorization))
+		apiV1Route.Use(bindMiddleware(middlewares.JWTAuthorization(config)))
+		apiV1Route.Use(bindMiddleware(middlewares.APITokenIpLimit(config)))
 		{
 			// Tokens
 			apiV1Route.GET("/tokens/list.json", bindApi(api.Tokens.TokenListHandler))
+			apiV1Route.POST("/tokens/generate/api.json", bindApi(api.Tokens.TokenGenerateAPIHandler))
 			apiV1Route.POST("/tokens/generate/mcp.json", bindApi(api.Tokens.TokenGenerateMCPHandler))
 			apiV1Route.POST("/tokens/revoke.json", bindApi(api.Tokens.TokenRevokeHandler))
 			apiV1Route.POST("/tokens/revoke_all.json", bindApi(api.Tokens.TokenRevokeAllHandler))
@@ -305,6 +337,12 @@ func startWebServer(c *core.CliContext) error {
 
 			if config.EnableUserVerifyEmail {
 				apiV1Route.POST("/users/verify_email/resend.json", bindApi(api.Users.UserSendVerifyEmailByLoginedUserHandler))
+			}
+
+			// External Authentications
+			if config.EnableOAuth2Login {
+				apiV1Route.GET("/users/external_auth/list.json", bindApi(api.UserExternalAuths.ExternalAuthListHanlder))
+				apiV1Route.POST("/users/external_auth/unlink.json", bindApi(api.UserExternalAuths.UnlinkExternalAuthHandler))
 			}
 
 			// Application Cloud Settings
@@ -325,6 +363,7 @@ func startWebServer(c *core.CliContext) error {
 			apiV1Route.GET("/data/statistics.json", bindApi(api.DataManagements.DataStatisticsHandler))
 			apiV1Route.POST("/data/clear/all.json", bindApi(api.DataManagements.ClearAllDataHandler))
 			apiV1Route.POST("/data/clear/transactions.json", bindApi(api.DataManagements.ClearAllTransactionsHandler))
+			apiV1Route.POST("/data/clear/transactions/by_account.json", bindApi(api.DataManagements.ClearAllTransactionsByAccountHandler))
 
 			if config.EnableDataExport {
 				apiV1Route.GET("/data/export.csv", bindCsv(api.DataManagements.ExportDataToEzbookkeepingCSVHandler))
@@ -345,17 +384,20 @@ func startWebServer(c *core.CliContext) error {
 			apiV1Route.GET("/transactions/count.json", bindApi(api.Transactions.TransactionCountHandler))
 			apiV1Route.GET("/transactions/list.json", bindApi(api.Transactions.TransactionListHandler))
 			apiV1Route.GET("/transactions/list/by_month.json", bindApi(api.Transactions.TransactionMonthListHandler))
+			apiV1Route.GET("/transactions/list/all.json", bindApi(api.Transactions.TransactionListAllHandler))
 			apiV1Route.GET("/transactions/reconciliation_statements.json", bindApi(api.Transactions.TransactionReconciliationStatementHandler))
 			apiV1Route.GET("/transactions/statistics.json", bindApi(api.Transactions.TransactionStatisticsHandler))
 			apiV1Route.GET("/transactions/statistics/trends.json", bindApi(api.Transactions.TransactionStatisticsTrendsHandler))
+			apiV1Route.GET("/transactions/statistics/asset_trends.json", bindApi(api.Transactions.TransactionStatisticsAssetTrendsHandler))
 			apiV1Route.GET("/transactions/amounts.json", bindApi(api.Transactions.TransactionAmountsHandler))
 			apiV1Route.GET("/transactions/get.json", bindApi(api.Transactions.TransactionGetHandler))
 			apiV1Route.POST("/transactions/add.json", bindApi(api.Transactions.TransactionCreateHandler))
 			apiV1Route.POST("/transactions/modify.json", bindApi(api.Transactions.TransactionModifyHandler))
+			apiV1Route.POST("/transactions/move/all.json", bindApi(api.Transactions.TransactionMoveAllBetweenAccountsHandler))
 			apiV1Route.POST("/transactions/delete.json", bindApi(api.Transactions.TransactionDeleteHandler))
 
 			if config.EnableDataImport {
-				apiV1Route.POST("/transactions/parse_dsv_file.json", bindApi(api.Transactions.TransactionParseImportDsvFileDataHandler))
+				apiV1Route.POST("/transactions/parse_custom_file.json", bindApi(api.Transactions.TransactionParseImportCustomFileDataHandler))
 				apiV1Route.POST("/transactions/parse_import.json", bindApi(api.Transactions.TransactionParseImportFileHandler))
 				apiV1Route.POST("/transactions/import.json", bindApi(api.Transactions.TransactionImportHandler))
 				apiV1Route.GET("/transactions/import/process.json", bindApi(api.Transactions.TransactionImportProcessHandler))
@@ -377,6 +419,14 @@ func startWebServer(c *core.CliContext) error {
 			apiV1Route.POST("/transaction/categories/move.json", bindApi(api.TransactionCategories.CategoryMoveHandler))
 			apiV1Route.POST("/transaction/categories/delete.json", bindApi(api.TransactionCategories.CategoryDeleteHandler))
 
+			// Transaction Tag Groups
+			apiV1Route.GET("/transaction/tags/groups/list.json", bindApi(api.TransactionTagGroups.TagGroupListHandler))
+			apiV1Route.GET("/transaction/tags/groups/get.json", bindApi(api.TransactionTagGroups.TagGroupGetHandler))
+			apiV1Route.POST("/transaction/tags/groups/add.json", bindApi(api.TransactionTagGroups.TagGroupCreateHandler))
+			apiV1Route.POST("/transaction/tags/groups/modify.json", bindApi(api.TransactionTagGroups.TagGroupModifyHandler))
+			apiV1Route.POST("/transaction/tags/groups/move.json", bindApi(api.TransactionTagGroups.TagGroupMoveHandler))
+			apiV1Route.POST("/transaction/tags/groups/delete.json", bindApi(api.TransactionTagGroups.TagGroupDeleteHandler))
+
 			// Transaction Tags
 			apiV1Route.GET("/transaction/tags/list.json", bindApi(api.TransactionTags.TagListHandler))
 			apiV1Route.GET("/transaction/tags/get.json", bindApi(api.TransactionTags.TagGetHandler))
@@ -395,6 +445,22 @@ func startWebServer(c *core.CliContext) error {
 			apiV1Route.POST("/transaction/templates/hide.json", bindApi(api.TransactionTemplates.TemplateHideHandler))
 			apiV1Route.POST("/transaction/templates/move.json", bindApi(api.TransactionTemplates.TemplateMoveHandler))
 			apiV1Route.POST("/transaction/templates/delete.json", bindApi(api.TransactionTemplates.TemplateDeleteHandler))
+
+			// Insights Explorers
+			apiV1Route.GET("/insights/explorers/list.json", bindApi(api.InsightsExplorers.InsightsExplorerListHandler))
+			apiV1Route.GET("/insights/explorers/get.json", bindApi(api.InsightsExplorers.InsightsExplorerGetHandler))
+			apiV1Route.POST("/insights/explorers/add.json", bindApi(api.InsightsExplorers.InsightsExplorerCreateHandler))
+			apiV1Route.POST("/insights/explorers/modify.json", bindApi(api.InsightsExplorers.InsightsExplorerModifyHandler))
+			apiV1Route.POST("/insights/explorers/hide.json", bindApi(api.InsightsExplorers.InsightsExplorerHideHandler))
+			apiV1Route.POST("/insights/explorers/move.json", bindApi(api.InsightsExplorers.InsightsExplorerMoveHandler))
+			apiV1Route.POST("/insights/explorers/delete.json", bindApi(api.InsightsExplorers.InsightsExplorerDeleteHandler))
+
+			// Large Language Models
+			if config.ReceiptImageRecognitionLLMConfig != nil && config.ReceiptImageRecognitionLLMConfig.LLMProvider != "" {
+				if config.TransactionFromAIImageRecognition {
+					apiV1Route.POST("/llm/transactions/recognize_receipt_image.json", bindApi(api.LargeLanguageModels.RecognizeReceiptImageHandler))
+				}
+			}
 
 			// Exchange Rates
 			apiV1Route.GET("/exchange_rates/latest.json", bindApi(api.ExchangeRates.LatestExchangeRateHandler))
@@ -432,6 +498,19 @@ func startWebServer(c *core.CliContext) error {
 func bindMiddleware(fn core.MiddlewareHandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		fn(core.WrapWebContext(c))
+	}
+}
+
+func bindRedirect(fn core.RedirectHandlerFunc) gin.HandlerFunc {
+	return func(ginCtx *gin.Context) {
+		c := core.WrapWebContext(ginCtx)
+		url, err := fn(c)
+
+		if err != nil {
+			utils.PrintJsonErrorResult(c, err)
+		} else {
+			c.Redirect(http.StatusFound, url)
+		}
 	}
 }
 
@@ -523,7 +602,7 @@ func bindCachedJs(fn core.DataHandlerFunc, store persistence.CacheStore) gin.Han
 		if err != nil {
 			utils.PrintDataErrorResult(c, "text/javascript", err)
 		} else {
-			utils.PrintDataSuccessResult(c, "text/javascript", "", result)
+			utils.PrintDataSuccessResult(c, "text/javascript; charset=utf-8", "", result)
 		}
 	})
 }
@@ -536,7 +615,7 @@ func bindCsv(fn core.DataHandlerFunc) gin.HandlerFunc {
 		if err != nil {
 			utils.PrintDataErrorResult(c, "text/text", err)
 		} else {
-			utils.PrintDataSuccessResult(c, "text/csv", fileName, result)
+			utils.PrintDataSuccessResult(c, "text/csv; charset=utf-8", fileName, result)
 		}
 	}
 }
@@ -549,7 +628,7 @@ func bindTsv(fn core.DataHandlerFunc) gin.HandlerFunc {
 		if err != nil {
 			utils.PrintDataErrorResult(c, "text/text", err)
 		} else {
-			utils.PrintDataSuccessResult(c, "text/tab-separated-values", fileName, result)
+			utils.PrintDataSuccessResult(c, "text/tab-separated-values; charset=utf-8", fileName, result)
 		}
 	}
 }

@@ -1,14 +1,13 @@
 <template>
     <v-dialog width="600" :persistent="submitting || !!selectedNames.length" v-model="showState">
-        <v-card class="pa-2 pa-sm-4 pa-md-4">
+        <v-card class="pa-sm-1 pa-md-2">
             <template #title>
-                <div class="d-flex align-center justify-center">
-                    <div class="d-flex w-100 align-center justify-center">
-                        <h4 class="text-h4" v-if="type === 'expenseCategory'">{{ tt('Create Nonexistent Expense Categories') }}</h4>
-                        <h4 class="text-h4" v-if="type === 'incomeCategory'">{{ tt('Create Nonexistent Income Categories') }}</h4>
-                        <h4 class="text-h4" v-if="type === 'transferCategory'">{{ tt('Create Nonexistent Transfer Categories') }}</h4>
-                        <h4 class="text-h4" v-if="type === 'tag'">{{ tt('Create Nonexistent Transaction Tags') }}</h4>
-                    </div>
+                <div class="d-flex flex-wrap">
+                    <h4 class="text-h4 text-wrap" v-if="type === 'expenseCategory'">{{ tt('Create Nonexistent Expense Categories') }}</h4>
+                    <h4 class="text-h4 text-wrap" v-if="type === 'incomeCategory'">{{ tt('Create Nonexistent Income Categories') }}</h4>
+                    <h4 class="text-h4 text-wrap" v-if="type === 'transferCategory'">{{ tt('Create Nonexistent Transfer Categories') }}</h4>
+                    <h4 class="text-h4 text-wrap" v-if="type === 'tag'">{{ tt('Create Nonexistent Transaction Tags') }}</h4>
+                    <v-spacer/>
                     <v-btn density="comfortable" color="default" variant="text" class="ms-2"
                            :disabled="submitting || !invalidItems || !invalidItems.length" :icon="true">
                         <v-icon :icon="mdiDotsVertical" />
@@ -31,12 +30,12 @@
                     </v-btn>
                 </div>
             </template>
-            <v-card-text class="my-md-4 w-100 d-flex justify-center">
+            <v-card-text class="d-flex flex-column flex-md-row flex-grow-1 overflow-y-auto">
                 <v-row>
-                    <v-col cols="12">
+                    <v-col cols="12" class="px-0">
                         <v-list class="py-0" density="compact" select-strategy="classic"
                                 :disabled="submitting" v-model:selected="selectedNames">
-                            <v-list-item class="py-0"
+                            <v-list-item class="mx-1 px-2 py-0"
                                          :key="item.value" :value="item.name" :title="item.name"
                                          v-for="item in invalidItems">
                                 <template #prepend="{ isActive }">
@@ -50,8 +49,8 @@
                     </v-col>
                 </v-row>
             </v-card-text>
-            <v-card-text class="overflow-y-visible">
-                <div class="w-100 d-flex justify-center gap-4">
+            <v-card-text>
+                <div class="w-100 d-flex justify-center flex-wrap mt-sm-1 mt-md-2 gap-4">
                     <v-btn :disabled="submitting || !selectedNames || !selectedNames.length" @click="confirm">
                         {{ tt('OK') }}
                         <v-progress-circular indeterminate size="22" class="ms-2" v-if="submitting"></v-progress-circular>
@@ -79,6 +78,7 @@ import { type NameValue, values } from '@/core/base.ts';
 import { CategoryType } from '@/core/category.ts';
 import { AUTOMATICALLY_CREATED_CATEGORY_ICON_ID } from '@/consts/icon.ts';
 import { DEFAULT_CATEGORY_COLOR } from '@/consts/color.ts';
+import { DEFAULT_TAG_GROUP_ID } from '@/consts/tag.ts';
 
 import { type TransactionCategoryCreateRequest, type TransactionCategoryCreateWithSubCategories, TransactionCategory } from '@/models/transaction_category.ts';
 import { type TransactionTagCreateRequest, TransactionTag } from '@/models/transaction_tag.ts';
@@ -285,12 +285,13 @@ function confirm(): void {
         const submitTags: TransactionTagCreateRequest[] = [];
 
         for (const item of selectedNames.value) {
-            const tag: TransactionTag = TransactionTag.createNewTag(item);
+            const tag: TransactionTag = TransactionTag.createNewTag(item, DEFAULT_TAG_GROUP_ID);
             submitTags.push(tag.toCreateRequest());
         }
 
         transactionTagsStore.addTags({
             tags: submitTags,
+            groupId: DEFAULT_TAG_GROUP_ID,
             skipExists: true
         }).then(response => {
             transactionTagsStore.loadAllTags({ force: false }).then(() => {

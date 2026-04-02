@@ -1,14 +1,22 @@
 <template>
     <f7-sheet swipe-to-close swipe-handler=".swipe-handler" class="numpad-sheet" style="height: auto"
               :opened="show" @sheet:open="onSheetOpen" @sheet:closed="onSheetClosed">
-        <div class="swipe-handler" style="z-index: 10"></div>
+        <div class="swipe-handler"></div>
         <f7-page-content class="margin-top no-padding-top">
             <div class="margin-top padding-horizontal" v-if="hint">
                 <span>{{ hint }}</span>
             </div>
-            <div class="numpad-values">
-                <span class="numpad-value" :class="currentDisplayNumClass">{{ currentDisplay }}</span>
+            <div class="numpad-values" @click="onDisplayValueClick">
+                <span id="numpad-value" class="numpad-value" :class="currentDisplayNumClass">{{ currentDisplay }}</span>
             </div>
+
+            <f7-popover class="numpad-paste-popover" target-el="#numpad-value"
+                        v-model:opened="showPastePopover">
+                <f7-list class="numpad-paste-popover-context-menu-list">
+                    <f7-list-item link="#" no-chevron :title="tt('Paste')" @click="paste"></f7-list-item>
+                </f7-list>
+            </f7-popover>
+
             <div class="numpad-buttons">
                 <f7-button class="numpad-button numpad-button-num" @click="inputNum(7)">
                     <span class="numpad-button-text numpad-button-text-normal">{{ digits[7] }}</span>
@@ -72,11 +80,12 @@
 import { ref, computed, watch } from 'vue';
 
 import { useI18n } from '@/locales/helpers.ts';
-import { useI18nUIComponents } from '@/lib/ui/mobile.ts';
+import { useI18nUIComponents, isiOS } from '@/lib/ui/mobile.ts';
 
 import { NumeralSystem } from '@/core/numeral.ts';
 import { ALL_CURRENCIES } from '@/consts/currency.ts';
 import { isNumber } from '@/lib/common.ts';
+import logger from '@/lib/logger.ts';
 
 const props = defineProps<{
     modelValue: number;
@@ -98,15 +107,20 @@ const {
     getAllLocalizedDigits,
     getCurrentNumeralSystemType,
     getCurrentDecimalSeparator,
+    parseAmountFromLocalizedNumerals,
     parseAmountFromWesternArabicNumerals,
     formatAmountToWesternArabicNumeralsWithoutDigitGrouping,
     appendDigitGroupingSymbolAndDecimalSeparator
 } = useI18n();
 const { showToast } = useI18nUIComponents();
 
+const isSupportClipboard = !!navigator.clipboard;
+
 const previousValue = ref<string>('');
 const currentSymbol = ref<string>('');
 const currentValue = ref<string>(getInitedStringValue(props.modelValue, props.flipNegative));
+const pastingAmount = ref<boolean>(false);
+const showPastePopover = ref<boolean>(false);
 
 const numeralSystem = computed<NumeralSystem>(() => getCurrentNumeralSystemType());
 
@@ -311,6 +325,52 @@ function clear(): void {
     currentSymbol.value = '';
 }
 
+function paste(): void {
+    showPastePopover.value = false;
+
+    if (pastingAmount.value) {
+        pastingAmount.value = false;
+        return;
+    }
+
+    pastingAmount.value = true;
+
+    navigator.clipboard.readText().then(text => {
+        pastingAmount.value = false;
+
+        if (!text) {
+            return;
+        }
+
+        const parsedAmount = parseAmountFromLocalizedNumerals(text);
+
+        if (Number.isNaN(parsedAmount) || !Number.isFinite(parsedAmount)) {
+            showToast('Cannot parse amount from clipboard');
+            return;
+        }
+
+        if (isNumber(props.minValue)) {
+            if (parsedAmount < (props.minValue)) {
+                showToast('Numeric Overflow');
+                return;
+            }
+        }
+
+        if (isNumber(props.maxValue)) {
+            if (parsedAmount > (props.maxValue)) {
+                showToast('Numeric Overflow');
+                return;
+            }
+        }
+
+        currentValue.value = getStringValue(parsedAmount, false);
+    }).catch(error => {
+        // Do not set pastingAmount to false here
+        // In iOS, system will show the paste context menu, if user click outside, the paste action should not be triggered again
+        logger.error('failed to read clipboard text', error);
+    });
+}
+
 function confirm(): boolean {
     if (currentSymbol.value && currentValue.value.length >= 1) {
         const previous = parseAmountFromWesternArabicNumerals(previousValue.value);
@@ -382,6 +442,18 @@ function onSheetOpen(): void {
 
 function onSheetClosed(): void {
     close();
+}
+
+function onDisplayValueClick(): void {
+    if (!isSupportClipboard) {
+        return;
+    }
+
+    if (isiOS()) {
+        paste();
+    } else {
+        showPastePopover.value = true;
+    }
 }
 
 watch(() => props.flipNegative, (newValue) => {
@@ -471,5 +543,33 @@ watch(() => props.flipNegative, (newValue) => {
 
 .numpad-button-text-confirm {
     font-size: var(--ebk-numpad-confirm-button-font-size);
+}
+
+.numpad-paste-popover.popover {
+    width: auto;
+
+    .numpad-paste-popover-context-menu-list.list {
+        :first-child li:first-child a {
+            &.active-state {
+                border-radius: unset;
+            }
+
+            > .item-content {
+                min-height: var(--ebk-popover-context-menu-min-height);
+
+                > .item-inner {
+                    min-height: var(--ebk-popover-context-menu-min-height);
+                    padding-top: var(--ebk-popover-context-menu-vertical-padding);
+                    padding-bottom: var(--ebk-popover-context-menu-vertical-padding);
+                    padding-left: var(--ebk-popover-context-menu-left-padding);
+                    padding-right: var(--ebk-popover-context-menu-right-padding);
+
+                    > .item-title {
+                        font-size: var(--ebk-popover-context-menu-button-font-size);
+                    }
+                }
+            }
+        }
+    }
 }
 </style>

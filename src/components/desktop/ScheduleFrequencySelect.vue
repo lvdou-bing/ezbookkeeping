@@ -67,7 +67,7 @@ import { useUserStore } from '@/stores/user.ts';
 import { type WeekDayValue } from '@/core/datetime.ts';
 import { ScheduledTemplateFrequencyType } from '@/core/template.ts';
 import { sortNumbersArray } from '@/lib/common.ts';
-import { scrollToSelectedItem } from '@/lib/ui/desktop.ts';
+import { scrollToSelectedItem } from '@/lib/ui/common.ts';
 
 const props = defineProps<CommonScheduleFrequencySelectionProps>();
 const emit = defineEmits<{
@@ -151,21 +151,15 @@ function updateFrequencyValue(value: number, selected: boolean | null): void {
     frequencyValue.value = sortNumbersArray(newFrequencyValues);
 }
 
-function isFrequencyValueSelected(value: number): boolean {
-    for (let i = 0; i < frequencyValue.value.length; i++) {
-        if (frequencyValue.value[i] === value) {
-            return true;
-        }
-    }
-
-    return false;
+function isFrequencyValueSelected(currentValue: number): boolean {
+    return frequencyValue.value.indexOf(currentValue) >= 0;
 }
 
 function onMenuStateChanged(state: boolean): void {
     if (state) {
         nextTick(() => {
             if (dropdownMenu.value && dropdownMenu.value.parentElement) {
-                scrollToSelectedItem(dropdownMenu.value.parentElement, '.schedule-frequency-value-container', '.frequency-value-selected');
+                scrollToSelectedItem(dropdownMenu.value.parentElement, '.schedule-frequency-value-container', '.schedule-frequency-value-container', '.frequency-value-selected');
             }
         });
     }

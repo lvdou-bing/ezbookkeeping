@@ -16,10 +16,12 @@ import (
 )
 
 const (
-	ebkWorkDirEnvName     = "EBK_WORK_DIR"
-	ebkEnvNamePrefix      = "EBK"
-	defaultConfigPath     = "/conf/ezbookkeeping.ini"
-	defaultStaticRootPath = "public"
+	ebkWorkDirEnvName                  = "EBK_WORK_DIR"
+	ebkConfigItemValueEnvNamePrefix    = "EBK"
+	ebkConfigItemFilePathEnvNamePrefix = "EBKCFP"
+	defaultConfigPath                  = "/conf/ezbookkeeping.ini"
+	defaultRootUrl                     = "%(protocol)s://%(domain)s:%(http_port)s/"
+	defaultStaticRootPath              = "public"
 )
 
 // SystemMode represents running mode of system
@@ -66,6 +68,17 @@ const (
 	WebDAVStorageType                string = "webdav"
 )
 
+const (
+	OpenAILLMProvider              string = "openai"
+	OpenAICompatibleLLMProvider    string = "openai_compatible"
+	AnthropicLLMProvider           string = "anthropic"
+	AnthropicCompatibleLLMProvider string = "anthropic_compatible"
+	OpenRouterLLMProvider          string = "openrouter"
+	OllamaLLMProvider              string = "ollama"
+	LMStudioLLMProvider            string = "lm_studio"
+	GoogleAILLMProvider            string = "google_ai"
+)
+
 // Uuid generator types
 const (
 	InternalUuidGeneratorType string = "internal"
@@ -74,6 +87,20 @@ const (
 // Duplicate checker types
 const (
 	InMemoryDuplicateCheckerType string = "in_memory"
+)
+
+// OAuth 2.0 user identifier types
+const (
+	OAuth2UserIdentifierEmail    string = "email"
+	OAuth2UserIdentifierUsername string = "username"
+)
+
+// OAuth 2.0 provider types
+const (
+	OAuth2ProviderOIDC      string = "oidc"
+	OAuth2ProviderNextcloud string = "nextcloud"
+	OAuth2ProviderGitea     string = "gitea"
+	OAuth2ProviderGithub    string = "github"
 )
 
 // Map provider types
@@ -101,29 +128,25 @@ const (
 
 // Exchange rates data source types
 const (
-	ReserveBankOfAustraliaDataSource    string = "reserve_bank_of_australia"
-	BankOfCanadaDataSource              string = "bank_of_canada"
-	CzechNationalBankDataSource         string = "czech_national_bank"
-	DanmarksNationalbankDataSource      string = "danmarks_national_bank"
-	EuroCentralBankDataSource           string = "euro_central_bank"
-	NationalBankOfGeorgiaDataSource     string = "national_bank_of_georgia"
-	CentralBankOfHungaryDataSource      string = "central_bank_of_hungary"
-	BankOfIsraelDataSource              string = "bank_of_israel"
-	CentralBankOfMyanmarDataSource      string = "central_bank_of_myanmar"
-	NorgesBankDataSource                string = "norges_bank"
-	NationalBankOfPolandDataSource      string = "national_bank_of_poland"
-	NationalBankOfRomaniaDataSource     string = "national_bank_of_romania"
-	BankOfRussiaDataSource              string = "bank_of_russia"
-	SwissNationalBankDataSource         string = "swiss_national_bank"
-	NationalBankOfUkraineDataSource     string = "national_bank_of_ukraine"
-	CentralBankOfUzbekistanDataSource   string = "central_bank_of_uzbekistan"
-	InternationalMonetaryFundDataSource string = "international_monetary_fund"
-	UserCustomExchangeRatesDataSource   string = "user_custom"
+	BankOfCanadaDataSource            string = "bank_of_canada"
+	CzechNationalBankDataSource       string = "czech_national_bank"
+	DanmarksNationalbankDataSource    string = "danmarks_national_bank"
+	EuroCentralBankDataSource         string = "euro_central_bank"
+	NationalBankOfGeorgiaDataSource   string = "national_bank_of_georgia"
+	CentralBankOfHungaryDataSource    string = "central_bank_of_hungary"
+	BankOfIsraelDataSource            string = "bank_of_israel"
+	CentralBankOfMyanmarDataSource    string = "central_bank_of_myanmar"
+	NorgesBankDataSource              string = "norges_bank"
+	NationalBankOfPolandDataSource    string = "national_bank_of_poland"
+	NationalBankOfRomaniaDataSource   string = "national_bank_of_romania"
+	BankOfRussiaDataSource            string = "bank_of_russia"
+	SwissNationalBankDataSource       string = "swiss_national_bank"
+	NationalBankOfUkraineDataSource   string = "national_bank_of_ukraine"
+	CentralBankOfUzbekistanDataSource string = "central_bank_of_uzbekistan"
+	UserCustomExchangeRatesDataSource string = "user_custom"
 )
 
 const (
-	defaultAppName string = "ezBookkeeping"
-
 	defaultHttpAddr string = "0.0.0.0"
 	defaultHttpPort uint16 = 8080
 	defaultDomain   string = "localhost"
@@ -140,6 +163,10 @@ const (
 
 	defaultWebDAVRequestTimeout uint32 = 10000 // 10 seconds
 
+	defaultAIRecognitionPictureMaxSize                 uint32 = 10485760 // 10MB
+	defaultAnthropicLargeLanguageModelAPIMaximumTokens uint32 = 1024
+	defaultLargeLanguageModelAPIRequestTimeout         uint32 = 60000 // 60 seconds
+
 	defaultInMemoryDuplicateCheckerCleanupInterval uint32 = 60  // 1 minutes
 	defaultDuplicateSubmissionsInterval            uint32 = 300 // 5 minutes
 
@@ -151,6 +178,9 @@ const (
 	defaultPasswordResetTokenExpiredTime uint32 = 3600    // 60 minutes
 	defaultMaxFailuresPerIpPerMinute     uint32 = 5
 	defaultMaxFailuresPerUserPerMinute   uint32 = 5
+
+	defaultOAuth2StateExpiredTime uint32 = 300   // 5 minutes
+	defaultOAuth2RequestTimeout   uint32 = 10000 // 10 seconds
 
 	defaultTransactionPictureFileMaxSize uint32 = 10485760 // 10MB
 	defaultUserAvatarFileMaxSize         uint32 = 1048576  // 1MB
@@ -209,15 +239,38 @@ type WebDAVConfig struct {
 	SkipTLSVerify  bool
 }
 
-// TipConfig represents a tip setting config
-type TipConfig struct {
-	Enabled              bool
-	DefaultContent       string
-	MultiLanguageContent map[string]string
+// LLMConfig represents the Large Language Model setting config
+type LLMConfig struct {
+	LLMProvider                         string
+	OpenAIAPIKey                        string
+	OpenAIModelID                       string
+	OpenAICompatibleBaseURL             string
+	OpenAICompatibleAPIKey              string
+	OpenAICompatibleModelID             string
+	AnthropicAPIKey                     string
+	AnthropicModelID                    string
+	AnthropicMaxTokens                  uint32
+	AnthropicCompatibleBaseURL          string
+	AnthropicCompatibleAPIVersion       string
+	AnthropicCompatibleAPIKey           string
+	AnthropicCompatibleModelID          string
+	AnthropicCompatibleMaxTokens        uint32
+	OpenRouterAPIKey                    string
+	OpenRouterModelID                   string
+	OllamaServerURL                     string
+	OllamaModelID                       string
+	LMStudioServerURL                   string
+	LMStudioToken                       string
+	LMStudioModelID                     string
+	GoogleAIAPIKey                      string
+	GoogleAIModelID                     string
+	LargeLanguageModelAPIRequestTimeout uint32
+	LargeLanguageModelAPIProxy          string
+	LargeLanguageModelAPISkipTLSVerify  bool
 }
 
-// NotificationConfig represents a notification setting config
-type NotificationConfig struct {
+// MultiLanguageContentConfig represents a multi-language content setting config
+type MultiLanguageContentConfig struct {
 	Enabled              bool
 	DefaultContent       string
 	MultiLanguageContent map[string]string
@@ -226,7 +279,6 @@ type NotificationConfig struct {
 // Config represents the global setting config
 type Config struct {
 	// Global
-	AppName     string
 	Mode        SystemMode
 	WorkingPath string
 
@@ -245,8 +297,9 @@ type Config struct {
 
 	StaticRootPath string
 
-	EnableGZip       bool
-	EnableRequestLog bool
+	EnableGZip            bool
+	EnableRequestLog      bool
+	EnableRequestIdHeader bool
 
 	// MCP
 	EnableMCPServer     bool
@@ -266,6 +319,7 @@ type Config struct {
 	EnableConsoleLog bool
 	EnableFileLog    bool
 
+	EnableDebugLog     bool
 	LogLevel           Level
 	FileLogPath        string
 	RequestFileLogPath string
@@ -279,6 +333,13 @@ type Config struct {
 	LocalFileSystemPath string
 	MinIOConfig         *MinIOConfig
 	WebDAVConfig        *WebDAVConfig
+
+	// Large Language Model
+	TransactionFromAIImageRecognition bool
+	MaxAIRecognitionPictureFileSize   uint32
+
+	// Large Language Model for Receipt Image Recognition
+	ReceiptImageRecognitionLLMConfig *LLMConfig
 
 	// Uuid
 	UuidGeneratorType string
@@ -299,7 +360,6 @@ type Config struct {
 	// Secret
 	SecretKeyNoSet                        bool
 	SecretKey                             string
-	EnableTwoFactor                       bool
 	TokenExpiredTime                      uint32
 	TokenExpiredTimeDuration              time.Duration
 	TokenMinRefreshInterval               uint32
@@ -309,22 +369,44 @@ type Config struct {
 	EmailVerifyTokenExpiredTimeDuration   time.Duration
 	PasswordResetTokenExpiredTime         uint32
 	PasswordResetTokenExpiredTimeDuration time.Duration
+	EnableAPIToken                        bool
+	APITokenAllowedRemoteIPs              []*core.IPPattern
 	MaxFailuresPerIpPerMinute             uint32
 	MaxFailuresPerUserPerMinute           uint32
-	EnableRequestIdHeader                 bool
+
+	// Auth
+	EnableInternalAuth                bool
+	EnableOAuth2Login                 bool
+	EnableTwoFactor                   bool
+	EnableUserForgetPassword          bool
+	ForgetPasswordRequireVerifyEmail  bool
+	OAuth2ClientID                    string
+	OAuth2ClientSecret                string
+	OAuth2UsePKCE                     bool
+	OAuth2UserIdentifier              string
+	OAuth2AutoRegister                bool
+	OAuth2Provider                    string
+	OAuth2StateExpiredTime            uint32
+	OAuth2StateExpiredTimeDuration    time.Duration
+	OAuth2RequestTimeout              uint32
+	OAuth2Proxy                       string
+	OAuth2SkipTLSVerify               bool
+	OAuth2OIDCProviderIssuerURL       string
+	OAuth2OIDCProviderCheckIssuerURL  bool
+	OAuth2OIDCCustomDisplayNameConfig MultiLanguageContentConfig
+	OAuth2NextcloudBaseUrl            string
+	OAuth2GiteaBaseUrl                string
 
 	// User
-	EnableUserRegister               bool
-	EnableUserVerifyEmail            bool
-	EnableUserForceVerifyEmail       bool
-	EnableUserForgetPassword         bool
-	ForgetPasswordRequireVerifyEmail bool
-	EnableTransactionPictures        bool
-	MaxTransactionPictureFileSize    uint32
-	EnableScheduledTransaction       bool
-	AvatarProvider                   core.UserAvatarProviderType
-	MaxAvatarFileSize                uint32
-	DefaultFeatureRestrictions       core.UserFeatureRestrictions
+	EnableUserRegister            bool
+	EnableUserVerifyEmail         bool
+	EnableUserForceVerifyEmail    bool
+	EnableTransactionPictures     bool
+	MaxTransactionPictureFileSize uint32
+	EnableScheduledTransaction    bool
+	AvatarProvider                core.UserAvatarProviderType
+	MaxAvatarFileSize             uint32
+	DefaultFeatureRestrictions    core.UserFeatureRestrictions
 
 	// Data
 	EnableDataExport  bool
@@ -332,12 +414,12 @@ type Config struct {
 	MaxImportFileSize uint32
 
 	// Tip
-	LoginPageTips TipConfig
+	LoginPageTips MultiLanguageContentConfig
 
 	// Notification
-	AfterRegisterNotification NotificationConfig
-	AfterLoginNotification    NotificationConfig
-	AfterOpenNotification     NotificationConfig
+	AfterRegisterNotification MultiLanguageContentConfig
+	AfterLoginNotification    MultiLanguageContentConfig
+	AfterOpenNotification     MultiLanguageContentConfig
 
 	// Map
 	MapProvider                           string
@@ -426,6 +508,18 @@ func LoadConfiguration(configFilePath string) (*Config, error) {
 		return nil, err
 	}
 
+	err = loadLLMGlobalConfiguration(config, cfgFile, "llm")
+
+	if err != nil {
+		return nil, err
+	}
+
+	config.ReceiptImageRecognitionLLMConfig, err = loadLLMConfiguration(cfgFile, "llm_image_recognition")
+
+	if err != nil {
+		return nil, err
+	}
+
 	err = loadUuidConfiguration(config, cfgFile, "uuid")
 
 	if err != nil {
@@ -445,6 +539,12 @@ func LoadConfiguration(configFilePath string) (*Config, error) {
 	}
 
 	err = loadSecurityConfiguration(config, cfgFile, "security")
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = loadAuthConfiguration(config, cfgFile, "auth")
 
 	if err != nil {
 		return nil, err
@@ -508,8 +608,6 @@ func GetDefaultConfigFilePath() (string, error) {
 }
 
 func loadGlobalConfiguration(config *Config, configFile *ini.File, sectionName string) error {
-	config.AppName = getConfigItemStringValue(configFile, sectionName, "app_name", defaultAppName)
-
 	if getConfigItemStringValue(configFile, sectionName, "mode") == "production" {
 		config.Mode = MODE_PRODUCTION
 	} else if getConfigItemStringValue(configFile, sectionName, "mode") == "development" {
@@ -544,7 +642,10 @@ func loadServerConfiguration(config *Config, configFile *ini.File, sectionName s
 	}
 
 	config.Domain = getConfigItemStringValue(configFile, sectionName, "domain", defaultDomain)
-	config.RootUrl = getConfigItemStringValue(configFile, sectionName, "root_url", fmt.Sprintf("%s://%s:%d/", string(config.Protocol), config.Domain, config.HttpPort))
+	config.RootUrl = getConfigItemStringValue(configFile, sectionName, "root_url", defaultRootUrl)
+	config.RootUrl = strings.ReplaceAll(config.RootUrl, "%(protocol)s", string(config.Protocol))
+	config.RootUrl = strings.ReplaceAll(config.RootUrl, "%(domain)s", config.Domain)
+	config.RootUrl = strings.ReplaceAll(config.RootUrl, "%(http_port)s", strconv.Itoa(int(config.HttpPort)))
 
 	if config.RootUrl[len(config.RootUrl)-1] != '/' {
 		config.RootUrl += "/"
@@ -561,34 +662,19 @@ func loadServerConfiguration(config *Config, configFile *ini.File, sectionName s
 
 	config.EnableGZip = getConfigItemBoolValue(configFile, sectionName, "enable_gzip", false)
 	config.EnableRequestLog = getConfigItemBoolValue(configFile, sectionName, "log_request", false)
+	config.EnableRequestIdHeader = getConfigItemBoolValue(configFile, sectionName, "request_id_header", true)
 
 	return nil
 }
 
 func loadMCPServerConfiguration(config *Config, configFile *ini.File, sectionName string) error {
+	var err error
+
 	config.EnableMCPServer = getConfigItemBoolValue(configFile, sectionName, "enable_mcp", false)
-	mcpAllowedRemoteIps := getConfigItemStringValue(configFile, sectionName, "mcp_allowed_remote_ips", "")
+	config.MCPAllowedRemoteIPs, err = getIPPatterns(configFile, sectionName, "mcp_allowed_remote_ips", "")
 
-	if mcpAllowedRemoteIps != "" {
-		remoteIPs := strings.Split(mcpAllowedRemoteIps, ",")
-		config.MCPAllowedRemoteIPs = make([]*core.IPPattern, 0, len(remoteIPs))
-
-		for i := 0; i < len(remoteIPs); i++ {
-			ip := strings.TrimSpace(remoteIPs[i])
-			pattern, err := core.ParseIPPattern(ip)
-
-			if err != nil {
-				return err
-			}
-
-			if pattern == nil {
-				continue
-			}
-
-			config.MCPAllowedRemoteIPs = append(config.MCPAllowedRemoteIPs, pattern)
-		}
-	} else {
-		config.MCPAllowedRemoteIPs = nil
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -676,6 +762,12 @@ func loadLogConfiguration(config *Config, configFile *ini.File, sectionName stri
 		return errs.ErrInvalidLogLevel
 	}
 
+	if config.LogLevel == LOGLEVEL_DEBUG {
+		config.EnableDebugLog = true
+	} else {
+		config.EnableDebugLog = false
+	}
+
 	if config.EnableFileLog {
 		fileLogPath := getConfigItemStringValue(configFile, sectionName, "log_path")
 		finalFileLogPath, _ := getFinalPath(config.WorkingPath, fileLogPath)
@@ -750,6 +842,76 @@ func loadStorageConfiguration(config *Config, configFile *ini.File, sectionName 
 	return nil
 }
 
+func loadLLMGlobalConfiguration(config *Config, configFile *ini.File, sectionName string) error {
+	config.TransactionFromAIImageRecognition = getConfigItemBoolValue(configFile, sectionName, "transaction_from_ai_image_recognition", false)
+	config.MaxAIRecognitionPictureFileSize = getConfigItemUint32Value(configFile, sectionName, "max_ai_recognition_picture_size", defaultAIRecognitionPictureMaxSize)
+
+	return nil
+}
+
+func loadLLMConfiguration(configFile *ini.File, sectionName string) (*LLMConfig, error) {
+	llmConfig := &LLMConfig{}
+	llmProvider := getConfigItemStringValue(configFile, sectionName, "llm_provider")
+
+	if llmProvider == "" {
+		llmConfig.LLMProvider = ""
+	} else if llmProvider == OpenAILLMProvider {
+		llmConfig.LLMProvider = OpenAILLMProvider
+	} else if llmProvider == OpenAICompatibleLLMProvider {
+		llmConfig.LLMProvider = OpenAICompatibleLLMProvider
+	} else if llmProvider == AnthropicLLMProvider {
+		llmConfig.LLMProvider = AnthropicLLMProvider
+	} else if llmProvider == AnthropicCompatibleLLMProvider {
+		llmConfig.LLMProvider = AnthropicCompatibleLLMProvider
+	} else if llmProvider == OpenRouterLLMProvider {
+		llmConfig.LLMProvider = OpenRouterLLMProvider
+	} else if llmProvider == OllamaLLMProvider {
+		llmConfig.LLMProvider = OllamaLLMProvider
+	} else if llmProvider == LMStudioLLMProvider {
+		llmConfig.LLMProvider = LMStudioLLMProvider
+	} else if llmProvider == GoogleAILLMProvider {
+		llmConfig.LLMProvider = GoogleAILLMProvider
+	} else {
+		return nil, errs.ErrInvalidLLMProvider
+	}
+
+	llmConfig.OpenAIAPIKey = getConfigItemStringValue(configFile, sectionName, "openai_api_key")
+	llmConfig.OpenAIModelID = getConfigItemStringValue(configFile, sectionName, "openai_model_id")
+
+	llmConfig.OpenAICompatibleBaseURL = getConfigItemStringValue(configFile, sectionName, "openai_compatible_base_url")
+	llmConfig.OpenAICompatibleAPIKey = getConfigItemStringValue(configFile, sectionName, "openai_compatible_api_key")
+	llmConfig.OpenAICompatibleModelID = getConfigItemStringValue(configFile, sectionName, "openai_compatible_model_id")
+
+	llmConfig.AnthropicAPIKey = getConfigItemStringValue(configFile, sectionName, "anthropic_api_key")
+	llmConfig.AnthropicModelID = getConfigItemStringValue(configFile, sectionName, "anthropic_model_id")
+	llmConfig.AnthropicMaxTokens = getConfigItemUint32Value(configFile, sectionName, "anthropic_max_tokens", defaultAnthropicLargeLanguageModelAPIMaximumTokens)
+
+	llmConfig.AnthropicCompatibleBaseURL = getConfigItemStringValue(configFile, sectionName, "anthropic_compatible_base_url")
+	llmConfig.AnthropicCompatibleAPIVersion = getConfigItemStringValue(configFile, sectionName, "anthropic_compatible_api_version")
+	llmConfig.AnthropicCompatibleAPIKey = getConfigItemStringValue(configFile, sectionName, "anthropic_compatible_api_key")
+	llmConfig.AnthropicCompatibleModelID = getConfigItemStringValue(configFile, sectionName, "anthropic_compatible_model_id")
+	llmConfig.AnthropicCompatibleMaxTokens = getConfigItemUint32Value(configFile, sectionName, "anthropic_compatible_max_tokens", defaultAnthropicLargeLanguageModelAPIMaximumTokens)
+
+	llmConfig.OpenRouterAPIKey = getConfigItemStringValue(configFile, sectionName, "openrouter_api_key")
+	llmConfig.OpenRouterModelID = getConfigItemStringValue(configFile, sectionName, "openrouter_model_id")
+
+	llmConfig.OllamaServerURL = getConfigItemStringValue(configFile, sectionName, "ollama_server_url")
+	llmConfig.OllamaModelID = getConfigItemStringValue(configFile, sectionName, "ollama_model_id")
+
+	llmConfig.LMStudioServerURL = getConfigItemStringValue(configFile, sectionName, "lm_studio_server_url")
+	llmConfig.LMStudioToken = getConfigItemStringValue(configFile, sectionName, "lm_studio_token")
+	llmConfig.LMStudioModelID = getConfigItemStringValue(configFile, sectionName, "lm_studio_model_id")
+
+	llmConfig.GoogleAIAPIKey = getConfigItemStringValue(configFile, sectionName, "google_ai_api_key")
+	llmConfig.GoogleAIModelID = getConfigItemStringValue(configFile, sectionName, "google_ai_model_id")
+
+	llmConfig.LargeLanguageModelAPIProxy = getConfigItemStringValue(configFile, sectionName, "proxy", "system")
+	llmConfig.LargeLanguageModelAPIRequestTimeout = getConfigItemUint32Value(configFile, sectionName, "request_timeout", defaultLargeLanguageModelAPIRequestTimeout)
+	llmConfig.LargeLanguageModelAPISkipTLSVerify = getConfigItemBoolValue(configFile, sectionName, "skip_tls_verify", false)
+
+	return llmConfig, nil
+}
+
 func loadUuidConfiguration(config *Config, configFile *ini.File, sectionName string) error {
 	if getConfigItemStringValue(configFile, sectionName, "generator_type") == InternalUuidGeneratorType {
 		config.UuidGeneratorType = InternalUuidGeneratorType
@@ -799,9 +961,10 @@ func loadCronConfiguration(config *Config, configFile *ini.File, sectionName str
 }
 
 func loadSecurityConfiguration(config *Config, configFile *ini.File, sectionName string) error {
+	var err error
+
 	config.SecretKeyNoSet = !getConfigItemIsSet(configFile, sectionName, "secret_key")
 	config.SecretKey = getConfigItemStringValue(configFile, sectionName, "secret_key", defaultSecretKey)
-	config.EnableTwoFactor = getConfigItemBoolValue(configFile, sectionName, "enable_two_factor", true)
 
 	config.TokenExpiredTime = getConfigItemUint32Value(configFile, sectionName, "token_expired_time", defaultTokenExpiredTime)
 
@@ -841,10 +1004,74 @@ func loadSecurityConfiguration(config *Config, configFile *ini.File, sectionName
 
 	config.PasswordResetTokenExpiredTimeDuration = time.Duration(config.PasswordResetTokenExpiredTime) * time.Second
 
+	config.EnableAPIToken = getConfigItemBoolValue(configFile, sectionName, "enable_api_token", false)
+	config.APITokenAllowedRemoteIPs, err = getIPPatterns(configFile, sectionName, "api_token_allowed_remote_ips", "")
+
+	if err != nil {
+		return err
+	}
+
 	config.MaxFailuresPerIpPerMinute = getConfigItemUint32Value(configFile, sectionName, "max_failures_per_ip_per_minute", defaultMaxFailuresPerIpPerMinute)
 	config.MaxFailuresPerUserPerMinute = getConfigItemUint32Value(configFile, sectionName, "max_failures_per_user_per_minute", defaultMaxFailuresPerUserPerMinute)
 
-	config.EnableRequestIdHeader = getConfigItemBoolValue(configFile, sectionName, "request_id_header", true)
+	return nil
+}
+
+func loadAuthConfiguration(config *Config, configFile *ini.File, sectionName string) error {
+	config.EnableInternalAuth = getConfigItemBoolValue(configFile, sectionName, "enable_internal_auth", true)
+	config.EnableOAuth2Login = getConfigItemBoolValue(configFile, sectionName, "enable_oauth2_auth", false)
+	config.EnableTwoFactor = getConfigItemBoolValue(configFile, sectionName, "enable_two_factor", true)
+	config.EnableUserForgetPassword = getConfigItemBoolValue(configFile, sectionName, "enable_forget_password", false)
+	config.ForgetPasswordRequireVerifyEmail = getConfigItemBoolValue(configFile, sectionName, "forget_password_require_email_verify", false)
+	config.OAuth2ClientID = getConfigItemStringValue(configFile, sectionName, "oauth2_client_id")
+	config.OAuth2ClientSecret = getConfigItemStringValue(configFile, sectionName, "oauth2_client_secret")
+	config.OAuth2UsePKCE = getConfigItemBoolValue(configFile, sectionName, "oauth2_use_pkce", false)
+
+	oauth2UserIdentifier := getConfigItemStringValue(configFile, sectionName, "oauth2_user_identifier")
+
+	if oauth2UserIdentifier == OAuth2UserIdentifierEmail {
+		config.OAuth2UserIdentifier = OAuth2UserIdentifierEmail
+	} else if oauth2UserIdentifier == OAuth2UserIdentifierUsername {
+		config.OAuth2UserIdentifier = OAuth2UserIdentifierUsername
+	} else {
+		return errs.ErrInvalidOAuth2UserIdentifier
+	}
+
+	config.OAuth2AutoRegister = getConfigItemBoolValue(configFile, sectionName, "oauth2_auto_register", true)
+
+	oauth2Provider := getConfigItemStringValue(configFile, sectionName, "oauth2_provider")
+
+	if oauth2Provider == "" {
+		config.OAuth2Provider = ""
+	} else if oauth2Provider == OAuth2ProviderOIDC {
+		config.OAuth2Provider = OAuth2ProviderOIDC
+	} else if oauth2Provider == OAuth2ProviderNextcloud {
+		config.OAuth2Provider = OAuth2ProviderNextcloud
+	} else if oauth2Provider == OAuth2ProviderGitea {
+		config.OAuth2Provider = OAuth2ProviderGitea
+	} else if oauth2Provider == OAuth2ProviderGithub {
+		config.OAuth2Provider = OAuth2ProviderGithub
+	} else {
+		return errs.ErrInvalidOAuth2Provider
+	}
+
+	config.OAuth2StateExpiredTime = getConfigItemUint32Value(configFile, sectionName, "oauth2_state_expired_time", defaultOAuth2StateExpiredTime)
+
+	if config.OAuth2StateExpiredTime < 60 {
+		return errs.ErrInvalidOAuth2StateExpiredTime
+	}
+
+	config.OAuth2StateExpiredTimeDuration = time.Duration(config.OAuth2StateExpiredTime) * time.Second
+
+	config.OAuth2Proxy = getConfigItemStringValue(configFile, sectionName, "oauth2_proxy", "system")
+	config.OAuth2RequestTimeout = getConfigItemUint32Value(configFile, sectionName, "oauth2_request_timeout", defaultOAuth2RequestTimeout)
+	config.OAuth2SkipTLSVerify = getConfigItemBoolValue(configFile, sectionName, "oauth2_skip_tls_verify", false)
+
+	config.OAuth2OIDCProviderIssuerURL = getConfigItemStringValue(configFile, sectionName, "oidc_provider_base_url")
+	config.OAuth2OIDCProviderCheckIssuerURL = getConfigItemBoolValue(configFile, sectionName, "oidc_provider_check_issuer_url", true)
+	config.OAuth2OIDCCustomDisplayNameConfig = getMultiLanguageContentConfig(configFile, sectionName, "enable_oidc_display_name", "oidc_custom_display_name")
+	config.OAuth2NextcloudBaseUrl = getConfigItemStringValue(configFile, sectionName, "nextcloud_base_url")
+	config.OAuth2GiteaBaseUrl = getConfigItemStringValue(configFile, sectionName, "gitea_base_url")
 
 	return nil
 }
@@ -853,8 +1080,6 @@ func loadUserConfiguration(config *Config, configFile *ini.File, sectionName str
 	config.EnableUserRegister = getConfigItemBoolValue(configFile, sectionName, "enable_register", false)
 	config.EnableUserVerifyEmail = getConfigItemBoolValue(configFile, sectionName, "enable_email_verify", false)
 	config.EnableUserForceVerifyEmail = getConfigItemBoolValue(configFile, sectionName, "enable_force_email_verify", false)
-	config.EnableUserForgetPassword = getConfigItemBoolValue(configFile, sectionName, "enable_forget_password", false)
-	config.ForgetPasswordRequireVerifyEmail = getConfigItemBoolValue(configFile, sectionName, "forget_password_require_email_verify", false)
 	config.EnableTransactionPictures = getConfigItemBoolValue(configFile, sectionName, "enable_transaction_picture", false)
 	config.MaxTransactionPictureFileSize = getConfigItemUint32Value(configFile, sectionName, "max_transaction_picture_size", defaultTransactionPictureFileMaxSize)
 	config.EnableScheduledTransaction = getConfigItemBoolValue(configFile, sectionName, "enable_scheduled_transaction", false)
@@ -884,15 +1109,15 @@ func loadDataConfiguration(config *Config, configFile *ini.File, sectionName str
 }
 
 func loadTipConfiguration(config *Config, configFile *ini.File, sectionName string) error {
-	config.LoginPageTips = getTipConfiguration(configFile, sectionName, "enable_tips_in_login_page", "login_page_tips_content")
+	config.LoginPageTips = getMultiLanguageContentConfig(configFile, sectionName, "enable_tips_in_login_page", "login_page_tips_content")
 
 	return nil
 }
 
 func loadNotificationConfiguration(config *Config, configFile *ini.File, sectionName string) error {
-	config.AfterRegisterNotification = getNotificationConfiguration(configFile, sectionName, "enable_notification_after_register", "after_register_notification_content")
-	config.AfterLoginNotification = getNotificationConfiguration(configFile, sectionName, "enable_notification_after_login", "after_login_notification_content")
-	config.AfterOpenNotification = getNotificationConfiguration(configFile, sectionName, "enable_notification_after_open", "after_open_notification_content")
+	config.AfterRegisterNotification = getMultiLanguageContentConfig(configFile, sectionName, "enable_notification_after_register", "after_register_notification_content")
+	config.AfterLoginNotification = getMultiLanguageContentConfig(configFile, sectionName, "enable_notification_after_login", "after_login_notification_content")
+	config.AfterOpenNotification = getMultiLanguageContentConfig(configFile, sectionName, "enable_notification_after_open", "after_open_notification_content")
 
 	return nil
 }
@@ -964,8 +1189,7 @@ func loadMapConfiguration(config *Config, configFile *ini.File, sectionName stri
 func loadExchangeRatesConfiguration(config *Config, configFile *ini.File, sectionName string) error {
 	dataSource := getConfigItemStringValue(configFile, sectionName, "data_source")
 
-	if dataSource == ReserveBankOfAustraliaDataSource ||
-		dataSource == BankOfCanadaDataSource ||
+	if dataSource == BankOfCanadaDataSource ||
 		dataSource == CzechNationalBankDataSource ||
 		dataSource == DanmarksNationalbankDataSource ||
 		dataSource == EuroCentralBankDataSource ||
@@ -980,7 +1204,6 @@ func loadExchangeRatesConfiguration(config *Config, configFile *ini.File, sectio
 		dataSource == SwissNationalBankDataSource ||
 		dataSource == NationalBankOfUkraineDataSource ||
 		dataSource == CentralBankOfUzbekistanDataSource ||
-		dataSource == InternationalMonetaryFundDataSource ||
 		dataSource == UserCustomExchangeRatesDataSource {
 		config.ExchangeRatesDataSource = dataSource
 	} else {
@@ -1029,29 +1252,36 @@ func getFinalPath(workingPath, p string) (string, error) {
 	return p, err
 }
 
-func getTipConfiguration(configFile *ini.File, sectionName string, enableKey string, contentKey string) TipConfig {
-	config := TipConfig{
-		Enabled:              getConfigItemBoolValue(configFile, sectionName, enableKey, false),
-		DefaultContent:       getConfigItemStringValue(configFile, sectionName, contentKey, ""),
-		MultiLanguageContent: make(map[string]string),
+func getIPPatterns(configFile *ini.File, sectionName string, itemName string, defaultValue string) ([]*core.IPPattern, error) {
+	configValue := getConfigItemStringValue(configFile, sectionName, itemName, defaultValue)
+
+	if configValue == "" {
+		return nil, nil
 	}
 
-	for languageTag := range locales.AllLanguages {
-		multiLanguageContentKey := strings.ToLower(languageTag)
-		multiLanguageContentKey = strings.Replace(multiLanguageContentKey, "-", "_", -1)
-		multiLanguageContentKey = contentKey + "_" + multiLanguageContentKey
-		content := getConfigItemStringValue(configFile, sectionName, multiLanguageContentKey, "")
+	remoteIPs := strings.Split(configValue, ",")
+	ipPatterns := make([]*core.IPPattern, 0, len(remoteIPs))
 
-		if content != "" {
-			config.MultiLanguageContent[languageTag] = content
+	for i := 0; i < len(remoteIPs); i++ {
+		ip := strings.TrimSpace(remoteIPs[i])
+		pattern, err := core.ParseIPPattern(ip)
+
+		if err != nil {
+			return nil, err
 		}
+
+		if pattern == nil {
+			continue
+		}
+
+		ipPatterns = append(ipPatterns, pattern)
 	}
 
-	return config
+	return ipPatterns, nil
 }
 
-func getNotificationConfiguration(configFile *ini.File, sectionName string, enableKey string, contentKey string) NotificationConfig {
-	config := NotificationConfig{
+func getMultiLanguageContentConfig(configFile *ini.File, sectionName string, enableKey string, contentKey string) MultiLanguageContentConfig {
+	config := MultiLanguageContentConfig{
 		Enabled:              getConfigItemBoolValue(configFile, sectionName, enableKey, false),
 		DefaultContent:       getConfigItemStringValue(configFile, sectionName, contentKey, ""),
 		MultiLanguageContent: make(map[string]string),
@@ -1072,8 +1302,7 @@ func getNotificationConfiguration(configFile *ini.File, sectionName string, enab
 }
 
 func getConfigItemIsSet(configFile *ini.File, sectionName string, itemName string) bool {
-	environmentKey := getEnvironmentKey(sectionName, itemName)
-	environmentValue := os.Getenv(environmentKey)
+	environmentValue := getConfigItemValueFromEnvironment(sectionName, itemName)
 
 	if len(environmentValue) > 0 {
 		return true
@@ -1085,29 +1314,29 @@ func getConfigItemIsSet(configFile *ini.File, sectionName string, itemName strin
 		return false
 	}
 
-	return section.Key(itemName).String() != ""
+	return section.Key(itemName).Value() != ""
 }
 
 func getConfigItemStringValue(configFile *ini.File, sectionName string, itemName string, defaultValue ...string) string {
-	environmentKey := getEnvironmentKey(sectionName, itemName)
-	environmentValue := os.Getenv(environmentKey)
+	environmentValue := getConfigItemValueFromEnvironment(sectionName, itemName)
 
 	if len(environmentValue) > 0 {
 		return environmentValue
 	}
 
 	section := configFile.Section(sectionName)
+	key := section.Key(itemName)
+	value := key.Value()
 
-	if len(defaultValue) > 0 {
-		return section.Key(itemName).MustString(defaultValue[0])
+	if len(value) == 0 && len(defaultValue) > 0 {
+		return defaultValue[0]
 	} else {
-		return section.Key(itemName).String()
+		return value
 	}
 }
 
 func getConfigItemUint8Value(configFile *ini.File, sectionName string, itemName string, defaultValue uint8) uint8 {
-	environmentKey := getEnvironmentKey(sectionName, itemName)
-	environmentValue := os.Getenv(environmentKey)
+	environmentValue := getConfigItemValueFromEnvironment(sectionName, itemName)
 
 	if len(environmentValue) > 0 {
 		value, err := strconv.ParseUint(environmentValue, 10, 8)
@@ -1118,7 +1347,7 @@ func getConfigItemUint8Value(configFile *ini.File, sectionName string, itemName 
 	}
 
 	section := configFile.Section(sectionName)
-	value, err := strconv.ParseUint(section.Key(itemName).String(), 10, 8)
+	value, err := strconv.ParseUint(section.Key(itemName).Value(), 10, 8)
 
 	if err == nil {
 		return uint8(value)
@@ -1128,8 +1357,7 @@ func getConfigItemUint8Value(configFile *ini.File, sectionName string, itemName 
 }
 
 func getConfigItemUint16Value(configFile *ini.File, sectionName string, itemName string, defaultValue uint16) uint16 {
-	environmentKey := getEnvironmentKey(sectionName, itemName)
-	environmentValue := os.Getenv(environmentKey)
+	environmentValue := getConfigItemValueFromEnvironment(sectionName, itemName)
 
 	if len(environmentValue) > 0 {
 		value, err := strconv.ParseUint(environmentValue, 10, 16)
@@ -1140,7 +1368,7 @@ func getConfigItemUint16Value(configFile *ini.File, sectionName string, itemName
 	}
 
 	section := configFile.Section(sectionName)
-	value, err := strconv.ParseUint(section.Key(itemName).String(), 10, 16)
+	value, err := strconv.ParseUint(section.Key(itemName).Value(), 10, 16)
 
 	if err == nil {
 		return uint16(value)
@@ -1150,8 +1378,7 @@ func getConfigItemUint16Value(configFile *ini.File, sectionName string, itemName
 }
 
 func getConfigItemUint32Value(configFile *ini.File, sectionName string, itemName string, defaultValue uint32) uint32 {
-	environmentKey := getEnvironmentKey(sectionName, itemName)
-	environmentValue := os.Getenv(environmentKey)
+	environmentValue := getConfigItemValueFromEnvironment(sectionName, itemName)
 
 	if len(environmentValue) > 0 {
 		value, err := strconv.ParseUint(environmentValue, 10, 32)
@@ -1162,7 +1389,7 @@ func getConfigItemUint32Value(configFile *ini.File, sectionName string, itemName
 	}
 
 	section := configFile.Section(sectionName)
-	value, err := strconv.ParseUint(section.Key(itemName).String(), 10, 32)
+	value, err := strconv.ParseUint(section.Key(itemName).Value(), 10, 32)
 
 	if err == nil {
 		return uint32(value)
@@ -1172,8 +1399,7 @@ func getConfigItemUint32Value(configFile *ini.File, sectionName string, itemName
 }
 
 func getConfigItemBoolValue(configFile *ini.File, sectionName string, itemName string, defaultValue bool) bool {
-	environmentKey := getEnvironmentKey(sectionName, itemName)
-	environmentValue := os.Getenv(environmentKey)
+	environmentValue := getConfigItemValueFromEnvironment(sectionName, itemName)
 
 	if len(environmentValue) > 0 {
 		value, err := strconv.ParseBool(environmentValue)
@@ -1184,11 +1410,39 @@ func getConfigItemBoolValue(configFile *ini.File, sectionName string, itemName s
 	}
 
 	section := configFile.Section(sectionName)
-	return section.Key(itemName).MustBool(defaultValue)
+	value, err := strconv.ParseBool(section.Key(itemName).Value())
+
+	if err == nil {
+		return value
+	}
+
+	return defaultValue
 }
 
-func getEnvironmentKey(sectionName string, itemName string) string {
-	return fmt.Sprintf("%s_%s_%s", ebkEnvNamePrefix, strings.ToUpper(sectionName), strings.ToUpper(itemName))
+func getConfigItemValueFromEnvironment(sectionName string, itemName string) string {
+	itemFilePathEnvironmentKey := getConfigItemFilePathEnvironmentKey(sectionName, itemName)
+	itemFilePath := os.Getenv(itemFilePathEnvironmentKey)
+
+	if itemFilePath != "" {
+		content, err := os.ReadFile(itemFilePath)
+
+		if err == nil {
+			return string(content)
+		}
+	}
+
+	itemValueEnvironmentKey := getConfigItemValueEnvironmentKey(sectionName, itemName)
+	itemValueEnvironmentValue := os.Getenv(itemValueEnvironmentKey)
+
+	return itemValueEnvironmentValue
+}
+
+func getConfigItemFilePathEnvironmentKey(sectionName string, itemName string) string {
+	return fmt.Sprintf("%s_%s_%s", ebkConfigItemFilePathEnvNamePrefix, strings.ToUpper(sectionName), strings.ToUpper(itemName))
+}
+
+func getConfigItemValueEnvironmentKey(sectionName string, itemName string) string {
+	return fmt.Sprintf("%s_%s_%s", ebkConfigItemValueEnvNamePrefix, strings.ToUpper(sectionName), strings.ToUpper(itemName))
 }
 
 func getLogLevel(logLevelStr string) (Level, error) {

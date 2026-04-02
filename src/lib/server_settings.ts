@@ -3,12 +3,24 @@ function getServerSetting(key: string): string | number | boolean | Record<strin
     return settings[key];
 }
 
+export function isInternalAuthEnabled(): boolean {
+    return getServerSetting('a') !== 0;
+}
+
+export function isOAuth2Enabled(): boolean {
+    return getServerSetting('o') === 1;
+}
+
 export function isUserRegistrationEnabled(): boolean {
     return getServerSetting('r') === 1;
 }
 
 export function isUserForgetPasswordEnabled(): boolean {
     return getServerSetting('f') === 1;
+}
+
+export function isAPITokenEnabled(): boolean {
+    return getServerSetting('t') === 1;
 }
 
 export function isUserVerifyEmailEnabled(): boolean {
@@ -31,8 +43,20 @@ export function isDataImportingEnabled(): boolean {
     return getServerSetting('i') === 1;
 }
 
+export function getOAuth2Provider(): string {
+    return getServerSetting('op') as string;
+}
+
+export function getOIDCCustomDisplayNames(): Record<string, string>{
+    return getServerSetting('ocn') as Record<string, string>;
+}
+
 export function isMCPServerEnabled(): boolean {
     return getServerSetting('mcp') === 1;
+}
+
+export function isTransactionFromAIImageRecognitionEnabled(): boolean {
+    return getServerSetting('llmt') === 1;
 }
 
 export function getLoginPageTips(): Record<string, string>{

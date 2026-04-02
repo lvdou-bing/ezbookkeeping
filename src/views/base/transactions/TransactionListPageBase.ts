@@ -9,27 +9,28 @@ import { useTransactionCategoriesStore } from '@/stores/transactionCategory.ts';
 import { useTransactionTagsStore } from '@/stores/transactionTag.ts';
 import { type TransactionListFilter, type TransactionMonthList, useTransactionsStore } from '@/stores/transaction.ts';
 
-import type { TypeAndName } from '@/core/base.ts';
+import { type TypeAndName, keys, entries } from '@/core/base.ts';
 import type { NumeralSystem } from '@/core/numeral.ts';
 import { type TextualYearMonthDay, type Year0BasedMonth, type LocalizedDateRange, type WeekDayValue, DateRange, DateRangeScene } from '@/core/datetime.ts';
 import { AccountType } from '@/core/account.ts';
 import { TransactionType } from '@/core/transaction.ts';
 import { DISPLAY_HIDDEN_AMOUNT, INCOMPLETE_AMOUNT_SUFFIX } from '@/consts/numeral.ts';
+import { DEFAULT_TAG_GROUP_ID } from '@/consts/tag.ts';
 
 import type { Account } from '@/models/account.ts';
 import type { TransactionCategory } from '@/models/transaction_category.ts';
+import { TransactionTagGroup } from '@/models/transaction_tag_group.ts';
 import type { TransactionTag } from '@/models/transaction_tag.ts';
-import type { Transaction } from '@/models/transaction.ts';
+import { type Transaction, TransactionTagFilter } from '@/models/transaction.ts';
 
 import {
     getUtcOffsetByUtcOffsetMinutes,
-    getTimezoneOffset,
     getTimezoneOffsetMinutes,
-    getBrowserTimezoneOffsetMinutes,
     getLocalDatetimeFromUnixTime,
-    getDummyUnixTimeForLocalUsage,
+    getSameDateTimeWithBrowserTimezone,
     getCurrentDateTime,
     parseDateTimeFromUnixTime,
+    parseDateTimeFromUnixTimeWithTimezoneOffset,
     getYearMonthFirstUnixTime,
     isDateRangeMatchOneMonth
 } from '@/lib/datetime.ts';
@@ -76,10 +77,10 @@ export function useTransactionListPageBase() {
         tt,
         getAllDateRanges,
         getCurrentNumeralSystemType,
-        formatUnixTimeToLongDateTime,
-        formatUnixTimeToLongDate,
-        formatUnixTimeToShortTime,
-        formatUnixTimeToGregorianLikeLongYearMonth,
+        formatDateTimeToLongDateTime,
+        formatDateTimeToLongDate,
+        formatDateTimeToShortTime,
+        formatDateTimeToGregorianLikeLongYearMonth,
         formatDateRange,
         formatAmountToLocalizedNumeralsWithCurrency
     } = useI18n();
@@ -98,7 +99,6 @@ export function useTransactionListPageBase() {
     const currentCalendarDate = ref<TextualYearMonthDay | ''>('');
 
     const numeralSystem = computed<NumeralSystem>(() => getCurrentNumeralSystemType());
-    const currentTimezoneOffsetMinutes = computed<number>(() => getTimezoneOffsetMinutes(settingsStore.appSettings.timeZone));
     const firstDayOfWeek = computed<WeekDayValue>(() => userStore.currentUserFirstDayOfWeek);
     const fiscalYearStart = computed<number>(() => userStore.currentUserFiscalYearStart);
     const defaultCurrency = computed<string>(() => getUnifiedSelectedAccountsCurrencyOrDefaultCurrency(allAccountsMap.value, queryAllFilterAccountIds.value, userStore.currentUserDefaultCurrency));
@@ -113,16 +113,12 @@ export function useTransactionListPageBase() {
     const allPrimaryCategories = computed<Record<string, TransactionCategory[]>>(() => {
         const primaryCategories: Record<string, TransactionCategory[]> = {};
 
-        for (const categoryType in transactionCategoriesStore.allTransactionCategories) {
-            if (!Object.prototype.hasOwnProperty.call(transactionCategoriesStore.allTransactionCategories, categoryType)) {
-                continue;
-            }
-
+        for (const [categoryType, categories] of entries(transactionCategoriesStore.allTransactionCategories)) {
             if (query.value.type && categoryTypeToTransactionType(parseInt(categoryType)) !== query.value.type) {
                 continue;
             }
 
-            primaryCategories[categoryType] = transactionCategoriesStore.allTransactionCategories[categoryType];
+            primaryCategories[categoryType] = categories;
         }
 
         return primaryCategories;
@@ -131,23 +127,27 @@ export function useTransactionListPageBase() {
     const allAvailableCategoriesCount = computed<number>(() => {
         let totalCount = 0;
 
-        for (const categoryType in transactionCategoriesStore.allTransactionCategories) {
-            if (!Object.prototype.hasOwnProperty.call(transactionCategoriesStore.allTransactionCategories, categoryType)) {
-                continue;
-            }
-
+        for (const [categoryType, categories] of entries(transactionCategoriesStore.allTransactionCategories)) {
             if (query.value.type && categoryTypeToTransactionType(parseInt(categoryType)) !== query.value.type) {
                 continue;
             }
 
-            if (transactionCategoriesStore.allTransactionCategories[categoryType]) {
-                totalCount += transactionCategoriesStore.allTransactionCategories[categoryType].length;
+            if (categories) {
+                totalCount += categories.length;
             }
         }
 
         return totalCount;
-
     });
+    const allTransactionTagGroupsWithDefault = computed<TransactionTagGroup[]>(() => {
+        const allGroups: TransactionTagGroup[] = [];
+        const defaultGroup = TransactionTagGroup.createNewTagGroup(tt('Default Group'));
+        defaultGroup.id = DEFAULT_TAG_GROUP_ID;
+        allGroups.push(defaultGroup);
+        allGroups.push(...transactionTagsStore.allTransactionTagGroups);
+        return allGroups;
+    });
+    const allTransactionTagsByGroup = computed<Record<string, TransactionTag[]>>(() => transactionTagsStore.allTransactionTagsByGroupMap);
     const allTransactionTags = computed<Record<string, TransactionTag>>(() => transactionTagsStore.allTransactionTagsMap);
     const allAvailableTagsCount = computed<number>(() => transactionTagsStore.allAvailableTagsCount);
 
@@ -169,8 +169,8 @@ export function useTransactionListPageBase() {
 
         return formatDateRange(query.value.dateType, query.value.minTime, query.value.maxTime);
     });
-    const queryMinTime = computed<string>(() => formatUnixTimeToLongDateTime(query.value.minTime));
-    const queryMaxTime = computed<string>(() => formatUnixTimeToLongDateTime(query.value.maxTime));
+    const queryMinTime = computed<string>(() => formatDateTimeToLongDateTime(parseDateTimeFromUnixTime(query.value.minTime)));
+    const queryMaxTime = computed<string>(() => formatDateTimeToLongDateTime(parseDateTimeFromUnixTime(query.value.maxTime)));
     const queryMonthlyData = computed<boolean>(() => isDateRangeMatchOneMonth(query.value.minTime, query.value.maxTime));
     const queryMonth = computed<Year0BasedMonth>(() => {
         if (!query.value.minTime || !query.value.maxTime) {
@@ -204,7 +204,7 @@ export function useTransactionListPageBase() {
     });
 
     const queryTagName = computed<string>(() => {
-        if (query.value.tagIds === 'none') {
+        if (query.value.tagFilter === TransactionTagFilter.TransactionNoTagFilterValue) {
             return tt('Without Tags');
         }
 
@@ -212,7 +212,15 @@ export function useTransactionListPageBase() {
             return tt('Multiple Tags');
         }
 
-        return allTransactionTags.value[query.value.tagIds]?.name || tt('Tags');
+        for (const tagId of keys(queryAllFilterTagIds.value)) {
+            const tagName = allTransactionTags.value[tagId]?.name;
+
+            if (tagName) {
+                return tagName;
+            }
+        }
+
+        return tt('Tags');
     });
 
     const queryAmount = computed<string>(() => {
@@ -229,14 +237,14 @@ export function useTransactionListPageBase() {
         const displayAmount: string[] = [];
 
         for (let i = 1; i < amountFilterItems.length; i++) {
-            displayAmount.push(formatAmountToLocalizedNumeralsWithCurrency(parseInt(amountFilterItems[i]), false));
+            displayAmount.push(formatAmountToLocalizedNumeralsWithCurrency(parseInt(amountFilterItems[i] as string), false));
         }
 
         return displayAmount.join(' ~ ');
     });
 
-    const transactionCalendarMinDate = computed<Date>(() => getLocalDatetimeFromUnixTime(getDummyUnixTimeForLocalUsage(query.value.minTime, getTimezoneOffsetMinutes(), getBrowserTimezoneOffsetMinutes())));
-    const transactionCalendarMaxDate = computed<Date>(() => getLocalDatetimeFromUnixTime(getDummyUnixTimeForLocalUsage(query.value.maxTime, getTimezoneOffsetMinutes(), getBrowserTimezoneOffsetMinutes())));
+    const transactionCalendarMinDate = computed<Date>(() => getLocalDatetimeFromUnixTime(getSameDateTimeWithBrowserTimezone(parseDateTimeFromUnixTime(query.value.minTime)).getUnixTime()));
+    const transactionCalendarMaxDate = computed<Date>(() => getLocalDatetimeFromUnixTime(getSameDateTimeWithBrowserTimezone(parseDateTimeFromUnixTime(query.value.maxTime)).getUnixTime()));
 
     const currentMonthTransactionData = computed<TransactionMonthList | null>(() => {
         const allTransactions = transactionsStore.transactions;
@@ -249,9 +257,9 @@ export function useTransactionListPageBase() {
         const currentYear = currentMonthMinDate.getGregorianCalendarYear();
         const currentMonth = currentMonthMinDate.getGregorianCalendarMonth();
 
-        for (let i = 0; i < allTransactions.length; i++) {
-            if (allTransactions[i].year === currentYear && allTransactions[i].month === currentMonth) {
-                return allTransactions[i];
+        for (const transactionMonth of allTransactions) {
+            if (transactionMonth.year === currentYear && transactionMonth.month === currentMonth) {
+                return transactionMonth;
             }
         }
 
@@ -270,6 +278,40 @@ export function useTransactionListPageBase() {
         return true;
     });
 
+    function hasSubCategoryInQuery(category: TransactionCategory): boolean {
+        if (!category.subCategories || !category.subCategories.length) {
+            return false;
+        }
+
+        for (const subCategory of category.subCategories) {
+            if (queryAllFilterCategoryIds.value[subCategory.id]) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function hasVisibleTagsInTagGroup(tagGroup: TransactionTagGroup): boolean {
+        const tagsInGroup = allTransactionTagsByGroup.value[tagGroup.id];
+
+        if (!tagsInGroup || !tagsInGroup.length) {
+            return false;
+        }
+
+        for (const tag of tagsInGroup) {
+            if (!tag.hidden || queryAllFilterTagIds.value[tag.id]) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function isSameAsDefaultTimezoneOffsetMinutes(transaction: Transaction): boolean {
+        return transaction.utcOffset === getTimezoneOffsetMinutes(transaction.time);
+    }
+
     function formatAmount(amount: number, hideAmount: boolean, currencyCode: string): string {
         if (hideAmount) {
             return formatAmountToLocalizedNumeralsWithCurrency(DISPLAY_HIDDEN_AMOUNT, currencyCode);
@@ -279,15 +321,18 @@ export function useTransactionListPageBase() {
     }
 
     function getDisplayTime(transaction: Transaction): string {
-        return formatUnixTimeToShortTime(transaction.time, transaction.utcOffset, currentTimezoneOffsetMinutes.value);
+        const dateTime = parseDateTimeFromUnixTimeWithTimezoneOffset(transaction.time, transaction.utcOffset);
+        return formatDateTimeToShortTime(dateTime);
     }
 
     function getDisplayLongDate(transaction: Transaction): string {
-        return formatUnixTimeToLongDate(transaction.time, transaction.utcOffset, currentTimezoneOffsetMinutes.value);
+        const dateTime = parseDateTimeFromUnixTimeWithTimezoneOffset(transaction.time, transaction.utcOffset);
+        return formatDateTimeToLongDate(dateTime);
     }
 
     function getDisplayLongYearMonth(transactionMonthList: TransactionMonthList): string {
-        return formatUnixTimeToGregorianLikeLongYearMonth(getYearMonthFirstUnixTime(transactionMonthList.yearDashMonth));
+        const yearMonthDateTime = parseDateTimeFromUnixTime(getYearMonthFirstUnixTime(transactionMonthList.yearDashMonth));
+        return formatDateTimeToGregorianLikeLongYearMonth(yearMonthDateTime);
     }
 
     function getDisplayTimezone(transaction: Transaction): string {
@@ -296,8 +341,10 @@ export function useTransactionListPageBase() {
     }
 
     function getDisplayTimeInDefaultTimezone(transaction: Transaction): string {
-        const utcOffset = numeralSystem.value.replaceWesternArabicDigitsToLocalizedDigits(getTimezoneOffset(settingsStore.appSettings.timeZone));
-        return `${formatUnixTimeToLongDateTime(transaction.time)} (UTC${utcOffset})`;
+        const timezoneOffsetMinutes = getTimezoneOffsetMinutes(transaction.time);
+        const dateTime = parseDateTimeFromUnixTimeWithTimezoneOffset(transaction.time, timezoneOffsetMinutes);
+        const utcOffset = numeralSystem.value.replaceWesternArabicDigitsToLocalizedDigits(getUtcOffsetByUtcOffsetMinutes(timezoneOffsetMinutes));
+        return `${formatDateTimeToLongDateTime(dateTime)} (UTC${utcOffset})`;
     }
 
     function getDisplayAmount(transaction: Transaction): string {
@@ -358,7 +405,6 @@ export function useTransactionListPageBase() {
         customMaxDatetime,
         currentCalendarDate,
         // computed states
-        currentTimezoneOffsetMinutes,
         firstDayOfWeek,
         fiscalYearStart,
         defaultCurrency,
@@ -371,6 +417,8 @@ export function useTransactionListPageBase() {
         allCategories,
         allPrimaryCategories,
         allAvailableCategoriesCount,
+        allTransactionTagGroupsWithDefault,
+        allTransactionTagsByGroup,
         allTransactionTags,
         allAvailableTagsCount,
         displayPageTypeName,
@@ -395,6 +443,9 @@ export function useTransactionListPageBase() {
         currentMonthTransactionData,
         canAddTransaction,
         // functions
+        hasSubCategoryInQuery,
+        hasVisibleTagsInTagGroup,
+        isSameAsDefaultTimezoneOffsetMinutes,
         getDisplayTime,
         getDisplayLongDate,
         getDisplayLongYearMonth,

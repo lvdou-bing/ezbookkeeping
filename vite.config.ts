@@ -9,6 +9,7 @@ import Checker from 'vite-plugin-checker';
 import git from 'git-rev-sync';
 
 import packageFile from './package.json';
+import contributorsFile from './contributors.json';
 import thirdPartyLicenseFile from './third-party-dependencies.json';
 
 const SRC_DIR = resolve(__dirname, './src');
@@ -75,6 +76,7 @@ export default defineConfig(() => {
             __EZBOOKKEEPING_VERSION__: JSON.stringify(packageFile.version),
             __EZBOOKKEEPING_BUILD_UNIX_TIME__: JSON.stringify(buildUnixTime),
             __EZBOOKKEEPING_BUILD_COMMIT_HASH__: JSON.stringify(git.short()),
+            __EZBOOKKEEPING_CONTRIBUTORS__: JSON.stringify(contributorsFile),
             __EZBOOKKEEPING_LICENSE__: JSON.stringify(licenseContent),
             __EZBOOKKEEPING_THIRD_PARTY_LICENSES__: JSON.stringify(thirdPartyLicenseFile)
         },
@@ -110,14 +112,15 @@ export default defineConfig(() => {
                 vueTsc: true
             }),
             VitePWA({
-                filename: 'sw.js',
-                manifestFilename: 'manifest.json',
-                strategies: 'generateSW',
+                strategies: 'injectManifest',
+                srcDir: './',
+                filename: 'sw.ts',
                 injectRegister: false,
+                manifestFilename: 'manifest.json',
                 manifest: {
                     name: 'ezBookkeeping',
                     short_name: 'ezBookkeeping',
-                    description: 'A lightweight, self-hosted personal finance app with a sleek, user-friendly interface and powerful bookkeeping features.',
+                    description: 'A lightweight, self-hosted personal finance app with a user-friendly interface and powerful bookkeeping features.',
                     theme_color: '#C67E48',
                     background_color: '#F6F7F8',
                     start_url: './',
@@ -136,9 +139,22 @@ export default defineConfig(() => {
                             sizes: '512x512',
                             type: 'image/png'
                         }
-                    ]
+                    ],
+                    share_target: {
+                        action: './__share__image__',
+                        method: 'POST',
+                        enctype: 'multipart/form-data',
+                        params: {
+                            files: [
+                                {
+                                    'name': 'image',
+                                    'accept': ['image/*']
+                                }
+                            ]
+                        }
+                    }
                 },
-                workbox: {
+                injectManifest: {
                     globDirectory: 'dist/',
                     globPatterns: ['**/*.{js,css,html,ico,png,jpg,jpeg,gif,tiff,bmp,ttf,woff,woff2,svg,eot}'],
                     globIgnores: [
@@ -154,47 +170,17 @@ export default defineConfig(() => {
                         'css/*.css',
                         'js/*.js'
                     ],
-                    runtimeCaching: [
-                        {
-                            urlPattern: /.*\/(mobile|mobile\/|desktop|desktop\/)$/,
-                            handler: 'NetworkFirst'
-                        },
-                        {
-                            urlPattern: /.*\/(mobile|mobile\/)#!\//,
-                            handler: 'NetworkFirst'
-                        },
-                        {
-                            urlPattern: /.*\/(desktop|desktop\/)#\//,
-                            handler: 'NetworkFirst'
-                        },
-                        {
-                            urlPattern: /.*\/(index\.html|mobile\.html|desktop\.html)/,
-                            handler: 'NetworkFirst'
-                        },
-                        {
-                            urlPattern: /.*\/img\/desktop\/.*\.(png|jpg|jpeg|gif|tiff|bmp|svg)/,
-                            handler: 'StaleWhileRevalidate'
-                        },
-                        {
-                            urlPattern: /.*\/fonts\/.*\.(eot|ttf|svg|woff)/,
-                            handler: 'CacheFirst'
-                        },
-                        {
-                            urlPattern: /.*\/css\/.*\.css/,
-                            handler: 'CacheFirst'
-                        },
-                        {
-                            urlPattern: /.*\/js\/.*\.js/,
-                            handler: 'CacheFirst'
-                        }
-                    ],
-                    navigateFallback: '',
-                    skipWaiting: true,
-                    clientsClaim: true
+                    maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
                 }
             })
         ],
         build: {
+            target: [
+                'chrome91',
+                'edge91',
+                'firefox91',
+                'safari15.4'
+            ],
             outDir: BUILD_DIR,
             sourcemap: false,
             assetsInlineLimit: 0,
@@ -284,7 +270,23 @@ export default defineConfig(() => {
                     target: 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },
+                '/oauth2': {
+                    target: 'http://127.0.0.1:8080/',
+                    changeOrigin: true
+                },
                 '/api': {
+                    target: 'http://127.0.0.1:8080/',
+                    changeOrigin: true
+                },
+                '/mcp': {
+                    target: 'http://127.0.0.1:8080/',
+                    changeOrigin: true
+                },
+                '/avatar': {
+                    target: 'http://127.0.0.1:8080/',
+                    changeOrigin: true
+                },
+                '/pictures': {
                     target: 'http://127.0.0.1:8080/',
                     changeOrigin: true
                 },

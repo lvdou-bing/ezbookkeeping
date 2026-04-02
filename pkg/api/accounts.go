@@ -150,10 +150,10 @@ func (a *AccountsApi) AccountCreateHandler(c *core.WebContext) (any, *errs.Error
 		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
 	}
 
-	utcOffset, err := c.GetClientTimezoneOffset()
+	clientTimezone, err := c.GetClientTimezone()
 
 	if err != nil {
-		log.Warnf(c, "[accounts.AccountCreateHandler] cannot get client timezone offset, because %s", err.Error())
+		log.Warnf(c, "[accounts.AccountCreateHandler] cannot get client timezone, because %s", err.Error())
 		return nil, errs.ErrClientTimezoneOffsetInvalid
 	}
 
@@ -278,7 +278,7 @@ func (a *AccountsApi) AccountCreateHandler(c *core.WebContext) (any, *errs.Error
 		}
 	}
 
-	err = a.accounts.CreateAccounts(c, mainAccount, accountCreateReq.BalanceTime, childrenAccounts, childrenAccountBalanceTimes, utcOffset)
+	err = a.accounts.CreateAccounts(c, mainAccount, accountCreateReq.BalanceTime, childrenAccounts, childrenAccountBalanceTimes, clientTimezone)
 
 	if err != nil {
 		log.Errorf(c, "[accounts.AccountCreateHandler] failed to create account \"id:%d\" for user \"uid:%d\", because %s", mainAccount.AccountId, uid, err.Error())
@@ -315,10 +315,10 @@ func (a *AccountsApi) AccountModifyHandler(c *core.WebContext) (any, *errs.Error
 		return nil, errs.ErrAccountIdInvalid
 	}
 
-	utcOffset, err := c.GetClientTimezoneOffset()
+	clientTimezone, err := c.GetClientTimezone()
 
 	if err != nil {
-		log.Warnf(c, "[accounts.AccountModifyHandler] cannot get client timezone offset, because %s", err.Error())
+		log.Warnf(c, "[accounts.AccountModifyHandler] cannot get client timezone, because %s", err.Error())
 		return nil, errs.ErrClientTimezoneOffsetInvalid
 	}
 
@@ -437,6 +437,17 @@ func (a *AccountsApi) AccountModifyHandler(c *core.WebContext) (any, *errs.Error
 	toUpdateAccount := a.getToUpdateAccount(uid, &accountModifyReq, mainAccount, false)
 
 	if toUpdateAccount != nil {
+		if toUpdateAccount.Category != mainAccount.Category {
+			maxOrderId, err := a.accounts.GetMaxDisplayOrder(c, uid, toUpdateAccount.Category)
+
+			if err != nil {
+				log.Errorf(c, "[accounts.AccountModifyHandler] failed to get max display order for user \"uid:%d\", because %s", uid, err.Error())
+				return nil, errs.Or(err, errs.ErrOperationFailed)
+			}
+
+			toUpdateAccount.DisplayOrder = maxOrderId + 1
+		}
+
 		anythingUpdate = true
 		toUpdateAccounts = append(toUpdateAccounts, toUpdateAccount)
 	}
@@ -521,7 +532,7 @@ func (a *AccountsApi) AccountModifyHandler(c *core.WebContext) (any, *errs.Error
 		}
 	}
 
-	err = a.accounts.ModifyAccounts(c, mainAccount, toUpdateAccounts, toAddAccounts, toAddAccountBalanceTimes, toDeleteAccountIds, utcOffset)
+	err = a.accounts.ModifyAccounts(c, mainAccount, toUpdateAccounts, toAddAccounts, toAddAccountBalanceTimes, toDeleteAccountIds, clientTimezone)
 
 	if err != nil {
 		log.Errorf(c, "[accounts.AccountModifyHandler] failed to update account \"id:%d\" for user \"uid:%d\", because %s", accountModifyReq.Id, uid, err.Error())
@@ -542,7 +553,6 @@ func (a *AccountsApi) AccountModifyHandler(c *core.WebContext) (any, *errs.Error
 
 		account.Type = oldAccount.Type
 		account.ParentAccountId = oldAccount.ParentAccountId
-		account.DisplayOrder = oldAccount.DisplayOrder
 		account.Currency = oldAccount.Currency
 		account.Balance = oldAccount.Balance
 
@@ -762,15 +772,16 @@ func (a *AccountsApi) getToUpdateAccount(uid int64, accountModifyReq *models.Acc
 	}
 
 	newAccount := &models.Account{
-		AccountId: oldAccount.AccountId,
-		Uid:       uid,
-		Name:      accountModifyReq.Name,
-		Category:  accountModifyReq.Category,
-		Icon:      accountModifyReq.Icon,
-		Color:     accountModifyReq.Color,
-		Comment:   accountModifyReq.Comment,
-		Extend:    newAccountExtend,
-		Hidden:    accountModifyReq.Hidden,
+		AccountId:    oldAccount.AccountId,
+		Uid:          uid,
+		Name:         accountModifyReq.Name,
+		DisplayOrder: oldAccount.DisplayOrder,
+		Category:     accountModifyReq.Category,
+		Icon:         accountModifyReq.Icon,
+		Color:        accountModifyReq.Color,
+		Comment:      accountModifyReq.Comment,
+		Extend:       newAccountExtend,
+		Hidden:       accountModifyReq.Hidden,
 	}
 
 	if newAccount.Name != oldAccount.Name ||

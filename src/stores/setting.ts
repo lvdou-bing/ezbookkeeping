@@ -2,6 +2,10 @@ import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 
 import {
+    values
+} from '@/core/base.ts';
+
+import {
     type ApplicationSettingValue,
     type ApplicationSettingSubValue,
     type ApplicationSettings,
@@ -10,6 +14,9 @@ import {
     UserApplicationCloudSettingType,
     ALL_ALLOWED_CLOUD_SYNC_APP_SETTING_KEY_TYPES
 } from '@/core/setting.ts';
+
+
+import { AccountCategory } from '@/core/account.ts';
 
 import {
     isObject,
@@ -37,15 +44,19 @@ export const useSettingsStore = defineStore('settings', () => {
 
     const enableApplicationCloudSync = computed<boolean>(() => getObjectOwnFieldCount(syncedAppSettings.value) > 0);
 
+    const accountCategoryDisplayOrders = computed<Record<number, number>>(() => AccountCategory.allDisplayOrders(appSettings.value.accountCategoryOrders));
+
     function updateApplicationSettingsValueAndAppSettingsFromCloudSetting(key: string, value: string | number | boolean | Record<string, boolean>): void {
         const keyItems = key.split('.');
+        const keyFirstPart = keyItems[0] as string;
 
         if (keyItems.length === 1) {
-            updateApplicationSettingsValue(keyItems[0], value);
-            appSettings.value[keyItems[0]] = value;
+            updateApplicationSettingsValue(keyFirstPart, value);
+            appSettings.value[keyFirstPart] = value;
         } else if (keyItems.length === 2) {
-            updateApplicationSettingsSubValue(keyItems[0], keyItems[1], value);
-            (appSettings.value[keyItems[0]] as Record<string, ApplicationSettingSubValue>)[keyItems[1]] = value;
+            const subKey = keyItems[1] as string;
+            updateApplicationSettingsSubValue(keyFirstPart, subKey, value);
+            (appSettings.value[keyFirstPart] as Record<string, ApplicationSettingSubValue>)[subKey] = value;
         } else {
             logger.warn(`cannot load application cloud setting "${key}", because it has invalid key format`);
         }
@@ -60,10 +71,12 @@ export const useSettingsStore = defineStore('settings', () => {
         }
 
         const keyItems = key.split('.');
-        let value: ApplicationSettingValue | ApplicationSettingSubValue = appSettings.value[key];
+        let value: ApplicationSettingValue | ApplicationSettingSubValue = appSettings.value[key] as (ApplicationSettingValue | ApplicationSettingSubValue);
 
         if (keyItems.length === 2) {
-            value = (appSettings.value[keyItems[0]] as Record<string, ApplicationSettingSubValue>)[keyItems[1]];
+            const primaryKey = keyItems[0] as string;
+            const subKey = keyItems[1] as string;
+            value = (appSettings.value[primaryKey] as Record<string, ApplicationSettingSubValue>)[subKey] as ApplicationSettingSubValue;
         } else if (keyItems.length > 2) {
             logger.warn(`cannot get application cloud setting "${key}", because it has invalid key format`);
             return null;
@@ -139,12 +152,18 @@ export const useSettingsStore = defineStore('settings', () => {
     function setAutoUpdateExchangeRatesData(value: boolean): void {
         updateApplicationSettingsValue('autoUpdateExchangeRatesData', value);
         appSettings.value.autoUpdateExchangeRatesData = value;
+        updateUserApplicationCloudSettingValue('autoUpdateExchangeRatesData', value);
     }
 
     function setShowAccountBalance(value: boolean): void {
         updateApplicationSettingsValue('showAccountBalance', value);
         appSettings.value.showAccountBalance = value;
         updateUserApplicationCloudSettingValue('showAccountBalance', value);
+    }
+
+    function setEnableSwipeBack(value: boolean): void {
+        updateApplicationSettingsValue('swipeBack', value);
+        appSettings.value.swipeBack = value;
     }
 
     function setEnableAnimate(value: boolean): void {
@@ -167,6 +186,7 @@ export const useSettingsStore = defineStore('settings', () => {
     function setShowAddTransactionButtonInDesktopNavbar(value: boolean): void {
         updateApplicationSettingsValue('showAddTransactionButtonInDesktopNavbar', value);
         appSettings.value.showAddTransactionButtonInDesktopNavbar = value;
+        updateUserApplicationCloudSettingValue('showAddTransactionButtonInDesktopNavbar', value);
     }
 
     // Overview Page
@@ -214,6 +234,18 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     // Transaction Edit Page
+    function setQuickSaveButtonStyleInMobileTransactionListPage(value: number): void {
+        updateApplicationSettingsValue('quickSaveButtonStyleInMobileTransactionListPage', value);
+        appSettings.value.quickSaveButtonStyleInMobileTransactionListPage = value;
+        updateUserApplicationCloudSettingValue('quickSaveButtonStyleInMobileTransactionListPage', value);
+    }
+
+    function setQuickAddButtonActionInMobileTransactionEditPage(value: number): void {
+        updateApplicationSettingsValue('quickAddButtonActionInMobileTransactionEditPage', value);
+        appSettings.value.quickAddButtonActionInMobileTransactionEditPage = value;
+        updateUserApplicationCloudSettingValue('quickAddButtonActionInMobileTransactionEditPage', value);
+    }
+
     function setAutoSaveTransactionDraft(value: string): void {
         updateApplicationSettingsValue('autoSaveTransactionDraft', value);
         appSettings.value.autoSaveTransactionDraft = value;
@@ -232,6 +264,40 @@ export const useSettingsStore = defineStore('settings', () => {
         updateUserApplicationCloudSettingValue('alwaysShowTransactionPicturesInMobileTransactionEditPage', value);
     }
 
+    // Import Transaction Dialog
+    function setRememberLastSelectedFileTypeInImportTransactionDialog(value: boolean): void {
+        updateApplicationSettingsValue('rememberLastSelectedFileTypeInImportTransactionDialog', value);
+        appSettings.value.rememberLastSelectedFileTypeInImportTransactionDialog = value;
+        updateUserApplicationCloudSettingValue('rememberLastSelectedFileTypeInImportTransactionDialog', value);
+
+        if (!value) {
+            setLastSelectedFileTypeInImportTransactionDialog('');
+        }
+    }
+
+    function setLastSelectedFileTypeInImportTransactionDialog(value: string): void {
+        if (!appSettings.value.rememberLastSelectedFileTypeInImportTransactionDialog) {
+            value = '';
+        }
+
+        updateApplicationSettingsValue('lastSelectedFileTypeInImportTransactionDialog', value);
+        appSettings.value.lastSelectedFileTypeInImportTransactionDialog = value;
+        updateUserApplicationCloudSettingValue('lastSelectedFileTypeInImportTransactionDialog', value);
+    }
+
+    // Insights Explorer Page
+    function setInsightsExplorerDefaultDateRangeType(value: number): void {
+        updateApplicationSettingsValue('insightsExplorerDefaultDateRangeType', value);
+        appSettings.value.insightsExplorerDefaultDateRangeType = value;
+        updateUserApplicationCloudSettingValue('insightsExplorerDefaultDateRangeType', value);
+    }
+
+    function setShowTagInInsightsExplorerPage(value: boolean): void {
+        updateApplicationSettingsValue('showTagInInsightsExplorerPage', value);
+        appSettings.value.showTagInInsightsExplorerPage = value;
+        updateUserApplicationCloudSettingValue('showTagInInsightsExplorerPage', value);
+    }
+
     // Account List Page
     function setTotalAmountExcludeAccountIds(value: Record<string, boolean>): void {
         updateApplicationSettingsValue('totalAmountExcludeAccountIds', value);
@@ -239,11 +305,36 @@ export const useSettingsStore = defineStore('settings', () => {
         updateUserApplicationCloudSettingValue('totalAmountExcludeAccountIds', value);
     }
 
+    function setAccountCategoryOrders(value: string): void {
+        updateApplicationSettingsValue('accountCategoryOrders', value);
+        appSettings.value.accountCategoryOrders = value;
+        updateUserApplicationCloudSettingValue('accountCategoryOrders', value);
+    }
+
+    function setHideCategoriesWithoutAccounts(value: boolean): void {
+        updateApplicationSettingsValue('hideCategoriesWithoutAccounts', value);
+        appSettings.value.hideCategoriesWithoutAccounts = value;
+        updateUserApplicationCloudSettingValue('hideCategoriesWithoutAccounts', value);
+    }
+
     // Exchange Rates Data Page
     function setCurrencySortByInExchangeRatesPage(value: number): void {
         updateApplicationSettingsValue('currencySortByInExchangeRatesPage', value);
         appSettings.value.currencySortByInExchangeRatesPage = value;
         updateUserApplicationCloudSettingValue('currencySortByInExchangeRatesPage', value);
+    }
+
+    // Browser Cache Management
+    function setMapCacheExpiration(value: number): void {
+        updateApplicationSettingsValue('mapCacheExpiration', value);
+        appSettings.value.mapCacheExpiration = value;
+        updateUserApplicationCloudSettingValue('mapCacheExpiration', value);
+    }
+
+    function setExchangeRatesDataCacheExpiration(value: number): void {
+        updateApplicationSettingsValue('exchangeRatesDataCacheExpiration', value);
+        appSettings.value.exchangeRatesDataCacheExpiration = value;
+        updateUserApplicationCloudSettingValue('exchangeRatesDataCacheExpiration', value);
     }
 
     // Statistics Settings
@@ -301,6 +392,18 @@ export const useSettingsStore = defineStore('settings', () => {
         updateUserApplicationCloudSettingValue('statistics.defaultTrendChartDataRangeType', value);
     }
 
+    function setStatisticsDefaultAssetTrendsChartType(value: number): void {
+        updateApplicationSettingsSubValue('statistics', 'defaultAssetTrendsChartType', value);
+        appSettings.value.statistics.defaultAssetTrendsChartType = value;
+        updateUserApplicationCloudSettingValue('statistics.defaultAssetTrendsChartType', value);
+    }
+
+    function setStatisticsDefaultAssetTrendsChartDateRange(value: number): void {
+        updateApplicationSettingsSubValue('statistics', 'defaultAssetTrendsChartDataRangeType', value);
+        appSettings.value.statistics.defaultAssetTrendsChartDataRangeType = value;
+        updateUserApplicationCloudSettingValue('statistics.defaultAssetTrendsChartDataRangeType', value);
+    }
+
     function clearAppSettings(): void {
         clearSettings();
         appSettings.value = getApplicationSettings();
@@ -313,8 +416,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
         const settings: ApplicationCloudSetting[] = [];
 
-        for (let i = 0; i < applicationSettingKeys.length; i++) {
-            const settingKey = applicationSettingKeys[i];
+        for (const settingKey of applicationSettingKeys) {
             const cloudSetting = createUserApplicationCloudSetting(settingKey);
 
             if (cloudSetting) {
@@ -333,9 +435,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
         syncedAppSettings.value = arrayItemToObjectField(cloudSettings.map(item => item.settingKey), true);
 
-        for (let i = 0; i < cloudSettings.length; i++) {
-            const setting = cloudSettings[i];
-
+        for (const setting of cloudSettings) {
             if (!setting || !setting.settingKey) {
                 continue;
             }
@@ -371,13 +471,7 @@ export const useSettingsStore = defineStore('settings', () => {
                     let isValid = isObject(map);
 
                     if (isValid) {
-                        for (const key in map) {
-                            if (!Object.prototype.hasOwnProperty.call(map, key)) {
-                                continue;
-                            }
-
-                            const value = map[key];
-
+                        for (const value of values(map)) {
                             if (!isBoolean(value)) {
                                 isValid = false;
                                 break;
@@ -424,6 +518,7 @@ export const useSettingsStore = defineStore('settings', () => {
         localeDefaultSettings,
         // computed states
         enableApplicationCloudSync,
+        accountCategoryDisplayOrders,
         // functions
         // -- Basic Settings
         setTheme,
@@ -431,6 +526,7 @@ export const useSettingsStore = defineStore('settings', () => {
         setTimeZone,
         setAutoUpdateExchangeRatesData,
         setShowAccountBalance,
+        setEnableSwipeBack,
         setEnableAnimate,
         // -- Application Lock
         setEnableApplicationLock,
@@ -447,13 +543,26 @@ export const useSettingsStore = defineStore('settings', () => {
         setShowTotalAmountInTransactionListPage,
         setShowTagInTransactionListPage,
         // -- Transaction Edit Page
+        setQuickSaveButtonStyleInMobileTransactionListPage,
+        setQuickAddButtonActionInMobileTransactionEditPage,
         setAutoSaveTransactionDraft,
         setAutoGetCurrentGeoLocation,
         setAlwaysShowTransactionPicturesInMobileTransactionEditPage,
+        // -- Import Transaction Dialog
+        setRememberLastSelectedFileTypeInImportTransactionDialog,
+        setLastSelectedFileTypeInImportTransactionDialog,
+        // -- Insights Explorer Page
+        setInsightsExplorerDefaultDateRangeType,
+        setShowTagInInsightsExplorerPage,
         // -- Account List Page
         setTotalAmountExcludeAccountIds,
+        setAccountCategoryOrders,
+        setHideCategoriesWithoutAccounts,
         // -- Exchange Rates Data Page
         setCurrencySortByInExchangeRatesPage,
+        // -- Browser Cache Management
+        setMapCacheExpiration,
+        setExchangeRatesDataCacheExpiration,
         // -- Statistics Settings
         setStatisticsDefaultChartDataType,
         setStatisticsDefaultTimezoneType,
@@ -464,6 +573,8 @@ export const useSettingsStore = defineStore('settings', () => {
         setStatisticsDefaultCategoricalChartDateRange,
         setStatisticsDefaultTrendChartType,
         setStatisticsDefaultTrendChartDateRange,
+        setStatisticsDefaultAssetTrendsChartType,
+        setStatisticsDefaultAssetTrendsChartDateRange,
         clearAppSettings,
         createApplicationCloudSettings,
         setApplicationSettingsFromCloudSettings,

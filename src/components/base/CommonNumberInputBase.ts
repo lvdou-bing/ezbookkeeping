@@ -15,11 +15,16 @@ export interface CommonNumberInputProps {
     modelValue: number;
 }
 
+export interface CommonNumberInputEmits {
+    (e: 'update:modelValue', value: number): void;
+    (e: 'enter'): void;
+}
+
 export type ParseNumberFunction = (value: string) => number;
 export type FormatNumberFunction = (value: number) => string;
 export type GetValidFormattedValueFunction = (value: number, textualValue: string, hasDecimalSeparator: boolean) => string;
 
-export function useCommonNumberInputBase(props: CommonNumberInputProps, maxDecimalCount: number, initValue: string, parseNumber: ParseNumberFunction, formatNumber: FormatNumberFunction, getValidFormattedValue: GetValidFormattedValueFunction) {
+export function useCommonNumberInputBase(props: CommonNumberInputProps, emit: CommonNumberInputEmits, maxDecimalCount: number, initValue: string, parseNumber: ParseNumberFunction, formatNumber: FormatNumberFunction, getValidFormattedValue: GetValidFormattedValueFunction) {
     const {
         getCurrentNumeralSystemType,
         getCurrentDecimalSeparator,
@@ -39,6 +44,12 @@ export function useCommonNumberInputBase(props: CommonNumberInputProps, maxDecim
         }
 
         if (props.readonly || props.disabled) {
+            e.preventDefault();
+            return;
+        }
+
+        if (e.key === 'Enter') {
+            emit('enter');
             e.preventDefault();
             return;
         }
@@ -160,12 +171,40 @@ export function useCommonNumberInputBase(props: CommonNumberInputProps, maxDecim
             return;
         }
 
-        const value = parseNumber(text);
+        const parsedText = parseNumber(text);
+
+        if (Number.isNaN(parsedText) || !Number.isFinite(parsedText)) {
+            e.preventDefault();
+            return;
+        }
+
+        const inputEl = e.target as HTMLInputElement;
+        const start = inputEl.selectionStart ?? 0;
+        const end = inputEl.selectionEnd ?? 0;
+        const fullText = currentValue.value.slice(0, start) + text + currentValue.value.slice(end);
+
+        const value = parseNumber(fullText);
         const textualValue = formatNumber(value);
         const decimalSeparator = getCurrentDecimalSeparator();
-        const hasDecimalSeparator = text.indexOf(decimalSeparator) >= 0;
+        const hasDecimalSeparator = fullText.indexOf(decimalSeparator) >= 0;
+        const pastedAmount = getValidFormattedValue(value, textualValue, hasDecimalSeparator);
+        let newPos: number = start + text.length;
 
-        currentValue.value = getValidFormattedValue(value, textualValue, hasDecimalSeparator);
+        if (pastedAmount.length !== fullText.length) {
+            if (newPos > pastedAmount.length) {
+                newPos = pastedAmount.length;
+            } else {
+                newPos = start;
+            }
+        }
+
+        if (window.requestAnimationFrame) {
+            window.requestAnimationFrame(() => {
+                inputEl.selectionStart = inputEl.selectionEnd = newPos;
+            });
+        }
+
+        currentValue.value = pastedAmount;
         e.preventDefault();
     }
 

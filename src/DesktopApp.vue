@@ -34,6 +34,7 @@ import { ThemeType } from '@/core/theme.ts';
 import { isProduction } from '@/lib/version.ts';
 import { initMapProvider } from '@/lib/map/index.ts';
 import { isUserLogined, isUserUnlocked } from '@/lib/userstate.ts';
+import { updateMapCacheExpiration } from '@/lib/cache.ts';
 import { getSystemTheme, setExpenseAndIncomeAmountColor } from '@/lib/ui/common.ts';
 
 const { tt, getCurrentLanguageInfo, setLanguage, initLocale } = useI18n();
@@ -45,6 +46,28 @@ const settingsStore = useSettingsStore();
 const userStore = useUserStore();
 const tokensStore = useTokensStore();
 const exchangeRatesStore = useExchangeRatesStore();
+
+const initialRoutePath: string = (() => {
+    if (!window.location.hash) {
+        return '/';
+    }
+
+    const hash = window.location.hash;
+    const hashIndex = hash.indexOf('#/');
+
+    if (hashIndex < 0) {
+        return '/';
+    }
+
+    const routePath = hash.substring(hashIndex + 1);
+    const queryIndex = routePath.indexOf('?');
+
+    if (queryIndex < 0) {
+        return routePath;
+    }
+
+    return routePath.substring(0, queryIndex);
+})();
 
 const showNotification = ref<boolean>(false);
 
@@ -84,7 +107,7 @@ settingsStore.updateLocalizedDefaultSettings(localeDefaultSettings);
 
 setExpenseAndIncomeAmountColor(userStore.currentUserExpenseAmountColor, userStore.currentUserIncomeAmountColor);
 
-if (isUserLogined()) {
+if (isUserLogined() && initialRoutePath !== '/verify_email' && initialRoutePath !== '/resetpassword' && initialRoutePath !== '/oauth2_callback') {
     if (!settingsStore.appSettings.applicationLock || isUserUnlocked()) {
         // refresh token if user is logined
         tokensStore.refreshTokenAndRevokeOldToken().then(response => {
@@ -98,12 +121,11 @@ if (isUserLogined()) {
                     rootStore.setNotificationContent(response.notificationContent);
                 }
             }
-        });
 
-        // auto refresh exchange rates data
-        if (settingsStore.appSettings.autoUpdateExchangeRatesData) {
-            exchangeRatesStore.getLatestExchangeRates({ silent: true, force: false });
-        }
+            updateMapCacheExpiration(settingsStore.appSettings.mapCacheExpiration);
+            exchangeRatesStore.removeExpiredExchangeRates(true);
+            exchangeRatesStore.autoUpdateExchangeRatesData();
+        });
     }
 }
 

@@ -22,12 +22,15 @@ import { useExchangeRatesStore } from '@/stores/exchangeRates.ts';
 
 import { APPLICATION_LOGO_PATH } from '@/consts/asset.ts';
 import { ThemeType } from '@/core/theme.ts';
+
+import { isFunction } from '@/lib/common.ts';
 import { isProduction } from '@/lib/version.ts';
-import { getTheme, isEnableAnimate } from '@/lib/settings.ts';
+import { getTheme, isEnableSwipeBack, isEnableAnimate } from '@/lib/settings.ts';
 import { initMapProvider } from '@/lib/map/index.ts';
 import { isUserLogined, isUserUnlocked } from '@/lib/userstate.ts';
+import { updateMapCacheExpiration } from '@/lib/cache.ts';
 import { setExpenseAndIncomeAmountColor } from '@/lib/ui/common.ts';
-import { isModalShowing, setAppFontSize } from '@/lib/ui/mobile.ts';
+import { isiOSHomeScreenMode, isModalShowing, setAppFontSize } from '@/lib/ui/mobile.ts';
 
 const { tt, getCurrentLanguageInfo, setLanguage, initLocale } = useI18n();
 
@@ -98,7 +101,9 @@ const f7params = ref<Framework7Parameters>({
         browserHistory: !isiOSHomeScreenMode(),
         browserHistoryInitialMatch: true,
         browserHistoryAnimate: false,
+        iosSwipeBack: isEnableSwipeBack(),
         iosSwipeBackAnimateShadow: false,
+        mdSwipeBack: isEnableSwipeBack(),
         mdSwipeBackAnimateShadow: false
     }
 });
@@ -108,16 +113,6 @@ const notification = ref<Notification.Notification | null>(null);
 const hasPushPopupBackdrop = ref<boolean | undefined>(undefined);
 const hasBackdrop = ref<boolean | undefined>(undefined);
 const currentNotificationContent = computed<string | null>(() => rootStore.currentNotification);
-
-function isiOSHomeScreenMode(): boolean {
-    if ((/iphone|ipod|ipad/gi).test(navigator.platform) && (/Safari/i).test(navigator.appVersion) &&
-        window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
-    ) {
-        return true;
-    }
-
-    return false;
-}
 
 function setThemeColorMeta(darkMode: boolean | undefined): void {
     if (hasPushPopupBackdrop.value) {
@@ -168,7 +163,7 @@ onMounted(() => {
         f7.on('sheetOpen', (sheet: Sheet.Sheet) => onBackdropChanged(sheet));
         f7.on('sheetClose', (sheet: Sheet.Sheet) => onBackdropChanged(sheet));
 
-        f7.on('pageBeforeOut',  () => {
+        f7.on('pageBeforeOut', () => {
             if (isModalShowing()) {
                 f7.actions.close('.actions-modal.modal-in', false);
                 f7.dialog.close('.dialog.modal-in', false);
@@ -188,6 +183,12 @@ onMounted(() => {
         const languageInfo = getCurrentLanguageInfo();
         initMapProvider(languageInfo?.alternativeLanguageTag);
     });
+
+    document.addEventListener('dragstart', (e) => {
+        if (!e.target || !('closest' in e.target) || !isFunction(e.target.closest) || !e.target.closest('.dragenabled')) {
+            e.preventDefault();
+        }
+    }, true);
 });
 
 watch(currentNotificationContent, (newValue) => {
@@ -235,12 +236,11 @@ if (isUserLogined()) {
                     rootStore.setNotificationContent(response.notificationContent);
                 }
             }
-        });
 
-        // auto refresh exchange rates data
-        if (settingsStore.appSettings.autoUpdateExchangeRatesData) {
-            exchangeRatesStore.getLatestExchangeRates({ silent: true, force: false });
-        }
+            updateMapCacheExpiration(settingsStore.appSettings.mapCacheExpiration);
+            exchangeRatesStore.removeExpiredExchangeRates(true);
+            exchangeRatesStore.autoUpdateExchangeRatesData();
+        });
     }
 }
 </script>

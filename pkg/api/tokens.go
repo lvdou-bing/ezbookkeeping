@@ -69,8 +69,10 @@ func (a *TokensApi) TokenListHandler(c *core.WebContext) (any, *errs.Error) {
 			tokenResp.IsCurrent = true
 		}
 
-		if token.TokenType == core.USER_TOKEN_TYPE_MCP && token.UserAgent != services.TokenUserAgentCreatedViaCli {
-			tokenResp.UserAgent = services.TokenUserAgentForMCP
+		if token.TokenType == core.USER_TOKEN_TYPE_API && token.UserAgent != core.TokenUserAgentCreatedViaCli {
+			tokenResp.UserAgent = core.TokenUserAgentForAPI
+		} else if token.TokenType == core.USER_TOKEN_TYPE_MCP && token.UserAgent != core.TokenUserAgentCreatedViaCli {
+			tokenResp.UserAgent = core.TokenUserAgentForMCP
 		}
 
 		tokenResps[i] = tokenResp
@@ -79,6 +81,53 @@ func (a *TokensApi) TokenListHandler(c *core.WebContext) (any, *errs.Error) {
 	sort.Sort(tokenResps)
 
 	return tokenResps, nil
+}
+
+// TokenGenerateAPIHandler generates a new API token for current user
+func (a *TokensApi) TokenGenerateAPIHandler(c *core.WebContext) (any, *errs.Error) {
+	if !a.CurrentConfig().EnableAPIToken {
+		return nil, errs.ErrAPITokenNotEnabled
+	}
+
+	var generateAPITokenReq models.TokenGenerateAPIRequest
+	err := c.ShouldBindJSON(&generateAPITokenReq)
+
+	if err != nil {
+		log.Warnf(c, "[tokens.TokenGenerateAPIHandler] parse request failed, because %s", err.Error())
+		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+
+	uid := c.GetCurrentUid()
+	user, err := a.users.GetUserById(c, uid)
+
+	if err != nil {
+		log.Warnf(c, "[tokens.TokenGenerateAPIHandler] failed to get user \"uid:%d\" info, because %s", uid, err.Error())
+		return nil, errs.ErrUserNotFound
+	}
+
+	if user.FeatureRestriction.Contains(core.USER_FEATURE_RESTRICTION_TYPE_GENERATE_API_TOKEN) {
+		return false, errs.ErrNotPermittedToPerformThisAction
+	}
+
+	if !a.users.IsPasswordEqualsUserPassword(generateAPITokenReq.Password, user) {
+		return nil, errs.ErrUserPasswordWrong
+	}
+
+	token, claims, err := a.tokens.CreateAPIToken(c, user, generateAPITokenReq.ExpiredInSeconds)
+
+	if err != nil {
+		log.Errorf(c, "[tokens.TokenGenerateAPIHandler] failed to create api token for user \"uid:%d\", because %s", user.Uid, err.Error())
+		return nil, errs.Or(err, errs.ErrTokenGenerating)
+	}
+
+	log.Infof(c, "[tokens.TokenGenerateAPIHandler] user \"uid:%d\" has generated api token, new token will be expired at %d", user.Uid, claims.ExpiresAt)
+
+	generateAPITokenResp := &models.TokenGenerateAPIResponse{
+		Token:      token,
+		APIBaseUrl: a.CurrentConfig().RootUrl + "api",
+	}
+
+	return generateAPITokenResp, nil
 }
 
 // TokenGenerateMCPHandler generates a new MCP token for current user
@@ -111,7 +160,7 @@ func (a *TokensApi) TokenGenerateMCPHandler(c *core.WebContext) (any, *errs.Erro
 		return nil, errs.ErrUserPasswordWrong
 	}
 
-	token, claims, err := a.tokens.CreateMCPToken(c, user)
+	token, claims, err := a.tokens.CreateMCPToken(c, user, generateMCPTokenReq.ExpiredInSeconds)
 
 	if err != nil {
 		log.Errorf(c, "[tokens.TokenGenerateMCPHandler] failed to create mcp token for user \"uid:%d\", because %s", user.Uid, err.Error())
@@ -136,7 +185,7 @@ func (a *TokensApi) TokenRevokeCurrentHandler(c *core.WebContext) (any, *errs.Er
 		return false, errs.ErrTokenIsEmpty
 	}
 
-	_, claims, err := a.tokens.ParseToken(c, tokenString)
+	_, claims, _, err := a.tokens.ParseToken(c, tokenString)
 
 	if err != nil {
 		return nil, errs.Or(err, errs.NewIncompleteOrIncorrectSubmissionError(err))
@@ -344,6 +393,7 @@ func (a *TokensApi) TokenRefreshHandler(c *core.WebContext) (any, *errs.Error) {
 
 	c.SetTextualToken(token)
 	c.SetTokenClaims(claims)
+	c.SetTokenContext("")
 
 	userApplicationCloudSettings, err := a.userAppCloudSettings.GetUserApplicationCloudSettingsByUid(c, user.Uid)
 	var applicationCloudSettingSlice *models.ApplicationCloudSettingSlice = nil

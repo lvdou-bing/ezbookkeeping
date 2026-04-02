@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mayswind/ezbookkeeping/pkg/converters"
+	"github.com/mayswind/ezbookkeeping/pkg/converters/converter"
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/errs"
 	"github.com/mayswind/ezbookkeeping/pkg/log"
@@ -91,7 +92,7 @@ func (l *UserDataCli) AddNewUser(c *core.CliContext, username string, email stri
 		FeatureRestriction:   l.CurrentConfig().DefaultFeatureRestrictions,
 	}
 
-	err := l.users.CreateUser(c, user)
+	err := l.users.CreateUser(c, user, false)
 
 	if err != nil {
 		log.CliErrorf(c, "[user_data.AddNewUser] failed to create user \"%s\", because %s", user.Username, err.Error())
@@ -149,7 +150,7 @@ func (l *UserDataCli) ModifyUserPassword(c *core.CliContext, username string, pa
 		Password: password,
 	}
 
-	_, _, err = l.users.UpdateUser(c, userNew, false)
+	err = l.users.UpdateUserPassword(c, userNew)
 
 	if err != nil {
 		log.CliErrorf(c, "[user_data.ModifyUserPassword] failed to update user \"%s\" password, because %s", user.Username, err.Error())
@@ -405,7 +406,7 @@ func (l *UserDataCli) ListUserTokens(c *core.CliContext, username string) ([]*mo
 }
 
 // CreateNewUserToken returns a new token for the specified user
-func (l *UserDataCli) CreateNewUserToken(c *core.CliContext, username string, tokenType string) (*models.TokenRecord, string, error) {
+func (l *UserDataCli) CreateNewUserToken(c *core.CliContext, username string, tokenType string, expiresInSeconds int64) (*models.TokenRecord, string, error) {
 	if username == "" {
 		log.CliErrorf(c, "[user_data.CreateNewUserToken] user name is empty")
 		return nil, "", errs.ErrUsernameIsEmpty
@@ -421,7 +422,17 @@ func (l *UserDataCli) CreateNewUserToken(c *core.CliContext, username string, to
 	var token string
 	var tokenRecord *models.TokenRecord
 
-	if tokenType == "mcp" {
+	if tokenType == "api" {
+		if !l.CurrentConfig().EnableAPIToken {
+			return nil, "", errs.ErrAPITokenNotEnabled
+		}
+
+		if user.FeatureRestriction.Contains(core.USER_FEATURE_RESTRICTION_TYPE_GENERATE_API_TOKEN) {
+			return nil, "", errs.ErrNotPermittedToPerformThisAction
+		}
+
+		token, tokenRecord, err = l.tokens.CreateAPITokenViaCli(c, user, expiresInSeconds)
+	} else if tokenType == "mcp" {
 		if !l.CurrentConfig().EnableMCPServer {
 			return nil, "", errs.ErrMCPServerNotEnabled
 		}
@@ -430,9 +441,7 @@ func (l *UserDataCli) CreateNewUserToken(c *core.CliContext, username string, to
 			return nil, "", errs.ErrNotPermittedToPerformThisAction
 		}
 
-		token, tokenRecord, err = l.tokens.CreateMCPTokenViaCli(c, user)
-	} else if tokenType == "normal" {
-		token, tokenRecord, err = l.tokens.CreateTokenViaCli(c, user)
+		token, tokenRecord, err = l.tokens.CreateMCPTokenViaCli(c, user, expiresInSeconds)
 	} else {
 		return nil, "", errs.ErrParameterInvalid
 	}
@@ -447,7 +456,7 @@ func (l *UserDataCli) CreateNewUserToken(c *core.CliContext, username string, to
 
 // RevokeUserToken revokes the specified token of the user
 func (l *UserDataCli) RevokeUserToken(c *core.CliContext, token string) error {
-	_, claims, err := l.tokens.ParseToken(c, token)
+	_, claims, _, err := l.tokens.ParseToken(c, token)
 
 	if err != nil {
 		log.CliErrorf(c, "[user_data.RevokeUserToken] failed to parse token, because %s", err.Error())
@@ -810,7 +819,7 @@ func (l *UserDataCli) ImportTransaction(c *core.CliContext, username string, fil
 		return err
 	}
 
-	parsedTransactions, newAccounts, newSubExpenseCategories, newSubIncomeCategories, newSubTransferCategories, newTags, err := dataImporter.ParseImportedData(c, user, data, utils.GetTimezoneOffsetMinutes(time.Local), accountMap, expenseCategoryMap, incomeCategoryMap, transferCategoryMap, tagMap)
+	parsedTransactions, newAccounts, newSubExpenseCategories, newSubIncomeCategories, newSubTransferCategories, newTags, err := dataImporter.ParseImportedData(c, user, data, time.Local, converter.DefaultImporterOptions, accountMap, expenseCategoryMap, incomeCategoryMap, transferCategoryMap, tagMap)
 
 	if err != nil {
 		log.CliErrorf(c, "[user_data.ImportTransaction] failed to parse imported data for \"%s\", because %s", username, err.Error())
@@ -957,7 +966,7 @@ func (l *UserDataCli) getUserEssentialDataForImport(c *core.CliContext, uid int6
 		return nil, nil, nil, nil, nil, err
 	}
 
-	tagMap = l.tags.GetTagNameMapByList(tags)
+	tagMap = l.tags.GetVisibleTagNameMapByList(tags)
 
 	return accountMap, expenseCategoryMap, incomeCategoryMap, transferCategoryMap, tagMap, nil
 }

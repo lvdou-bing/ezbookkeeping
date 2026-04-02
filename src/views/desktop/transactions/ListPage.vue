@@ -63,11 +63,16 @@
                                             <v-btn class="ms-3" color="default" variant="outlined"
                                                    :disabled="loading || !canAddTransaction" @click="add()">
                                                 {{ tt('Add') }}
-                                                <v-menu activator="parent" :open-on-hover="true" v-if="allTransactionTemplates && allTransactionTemplates.length">
+                                                <v-menu activator="parent" max-height="500" :open-on-hover="true" v-if="isTransactionFromAIImageRecognitionEnabled() || (allTransactionTemplates && allTransactionTemplates.length)">
                                                     <v-list>
-                                                        <v-list-item :title="template.name"
+                                                        <v-list-item key="AIImageRecognition"
+                                                                     :title="tt('AI Image Recognition')"
+                                                                     :prepend-icon="mdiMagicStaff"
+                                                                     v-if="isTransactionFromAIImageRecognitionEnabled()"
+                                                                     @click="addByRecognizingImage"></v-list-item>
+                                                        <v-list-item :key="template.id"
+                                                                     :title="template.name"
                                                                      :prepend-icon="mdiTextBoxOutline"
-                                                                     :key="template.id"
                                                                      v-for="template in allTransactionTemplates"
                                                                      @click="add(template)"></v-list-item>
                                                     </v-list>
@@ -254,15 +259,17 @@
 
                                                         <template :key="categoryType"
                                                                   v-for="(categories, categoryType) in allPrimaryCategories">
+                                                            <v-divider />
+
                                                             <v-list-item density="compact" v-show="categories && categories.length">
                                                                 <v-list-item-title>
                                                                     <span class="text-sm">{{ getTransactionTypeName(categoryTypeToTransactionType(parseInt(categoryType)), 'Type') }}</span>
                                                                 </v-list-item-title>
                                                             </v-list-item>
 
-                                                            <v-list-group :key="category.id" v-for="category in categories">
-                                                                <template #activator="{ props }" v-if="!category.hidden || query.categoryIds === category.id || (allCategories[query.categoryIds] && allCategories[query.categoryIds].parentId === category.id)">
-                                                                    <v-divider />
+                                                            <v-list-group :key="category.id" v-for="(category, index) in categories">
+                                                                <template #activator="{ props }" v-if="!category.hidden || queryAllFilterCategoryIds[category.id] || allCategories[query.categoryIds]?.parentId === category.id || hasSubCategoryInQuery(category)">
+                                                                    <v-divider v-if="index > 0" />
                                                                     <v-list-item class="text-sm" density="compact"
                                                                                  :class="getCategoryListItemCheckedClass(category, queryAllFilterCategoryIds)"
                                                                                  v-bind="props">
@@ -291,12 +298,12 @@
 
                                                                 <template :key="subCategory.id"
                                                                           v-for="subCategory in category.subCategories">
-                                                                    <v-divider v-if="!subCategory.hidden || query.categoryIds === subCategory.id" />
+                                                                    <v-divider v-if="!subCategory.hidden || queryAllFilterCategoryIds[subCategory.id]" />
                                                                     <v-list-item class="text-sm" density="compact"
                                                                                  :value="subCategory.id"
                                                                                  :class="{ 'list-item-selected': query.categoryIds === subCategory.id, 'item-in-multiple-selection': queryAllFilterCategoryIdsCount > 1 && queryAllFilterCategoryIds[subCategory.id] }"
                                                                                  :append-icon="(query.categoryIds === subCategory.id ? mdiCheck : undefined)"
-                                                                                 v-if="!subCategory.hidden || query.categoryIds === subCategory.id">
+                                                                                 v-if="!subCategory.hidden || queryAllFilterCategoryIds[subCategory.id]">
                                                                         <v-list-item-title class="cursor-pointer"
                                                                                            @click="changeCategoryFilter(subCategory.id)">
                                                                             <div class="d-flex align-center">
@@ -402,12 +409,12 @@
                                                         </v-list-item>
                                                         <template :key="account.id"
                                                                   v-for="account in allAccounts">
-                                                            <v-divider v-if="(!account.hidden && (!allAccountsMap[account.parentId] || !allAccountsMap[account.parentId].hidden)) || query.accountIds === account.id" />
+                                                            <v-divider v-if="(!account.hidden && (!allAccountsMap[account.parentId] || !allAccountsMap[account.parentId]!.hidden)) || queryAllFilterAccountIds[account.id]" />
                                                             <v-list-item class="text-sm" density="compact"
                                                                          :value="account.id"
                                                                          :class="{ 'list-item-selected': query.accountIds === account.id, 'item-in-multiple-selection': queryAllFilterAccountIdsCount > 1 && queryAllFilterAccountIds[account.id] }"
                                                                          :append-icon="(query.accountIds === account.id ? mdiCheck : undefined)"
-                                                                         v-if="(!account.hidden && (!allAccountsMap[account.parentId] || !allAccountsMap[account.parentId].hidden)) || query.accountIds === account.id">
+                                                                         v-if="(!account.hidden && (!allAccountsMap[account.parentId] || !allAccountsMap[account.parentId]!.hidden)) || queryAllFilterAccountIds[account.id]">
                                                                 <v-list-item-title class="cursor-pointer"
                                                                                    @click="changeAccountFilter(account.id)">
                                                                     <div class="d-flex align-center">
@@ -426,15 +433,15 @@
                                                         @update:model-value="scrollTagMenuToSelectedItem">
                                                     <template #activator="{ props }">
                                                         <div class="d-flex align-center cursor-pointer"
-                                                             :class="{ 'readonly': loading, 'text-primary': query.tagIds }" v-bind="props">
+                                                             :class="{ 'readonly': loading, 'text-primary': query.tagFilter }" v-bind="props">
                                                             <span>{{ queryTagName }}</span>
                                                             <v-icon :icon="mdiMenuDown" />
                                                         </div>
                                                     </template>
                                                     <v-list :selected="[queryAllSelectedFilterTagIds]">
                                                         <v-list-item key="" value="" class="text-sm" density="compact"
-                                                                     :class="{ 'list-item-selected': !query.tagIds }"
-                                                                     :append-icon="(!query.tagIds ? mdiCheck : undefined)">
+                                                                     :class="{ 'list-item-selected': !query.tagFilter }"
+                                                                     :append-icon="(!query.tagFilter ? mdiCheck : undefined)">
                                                             <v-list-item-title class="cursor-pointer"
                                                                                @click="changeTagFilter('')">
                                                                 <div class="d-flex align-center">
@@ -443,11 +450,13 @@
                                                                 </div>
                                                             </v-list-item-title>
                                                         </v-list-item>
-                                                        <v-list-item key="none" value="none" class="text-sm" density="compact"
-                                                                     :class="{ 'list-item-selected': query.tagIds === 'none' }"
-                                                                     :append-icon="(query.tagIds === 'none' ? mdiCheck : undefined)">
+                                                        <v-list-item class="text-sm" density="compact"
+                                                                     :key="TransactionTagFilter.TransactionNoTagFilterValue"
+                                                                     :value="TransactionTagFilter.TransactionNoTagFilterValue"
+                                                                     :class="{ 'list-item-selected': query.tagFilter === TransactionTagFilter.TransactionNoTagFilterValue }"
+                                                                     :append-icon="(query.tagFilter === TransactionTagFilter.TransactionNoTagFilterValue ? mdiCheck : undefined)">
                                                             <v-list-item-title class="cursor-pointer"
-                                                                               @click="changeTagFilter('none')">
+                                                                               @click="changeTagFilter(TransactionTagFilter.TransactionNoTagFilterValue)">
                                                                 <div class="d-flex align-center">
                                                                     <v-icon :icon="mdiBorderNoneVariant" />
                                                                     <span class="text-sm ms-3">{{ tt('Without Tags') }}</span>
@@ -455,8 +464,8 @@
                                                             </v-list-item-title>
                                                         </v-list-item>
                                                         <v-list-item key="multiple" value="multiple" class="text-sm" density="compact"
-                                                                     :class="{ 'list-item-selected': query.tagIds && queryAllFilterTagIdsCount > 1 }"
-                                                                     :append-icon="(query.tagIds && queryAllFilterTagIdsCount > 1 ? mdiCheck : undefined)"
+                                                                     :class="{ 'list-item-selected': query.tagFilter && queryAllFilterTagIdsCount > 1 }"
+                                                                     :append-icon="(query.tagFilter && queryAllFilterTagIdsCount > 1 ? mdiCheck : undefined)"
                                                                      v-if="allAvailableTagsCount > 0">
                                                             <v-list-item-title class="cursor-pointer"
                                                                                @click="showFilterTagDialog = true">
@@ -467,40 +476,33 @@
                                                             </v-list-item-title>
                                                         </v-list-item>
 
-                                                        <v-divider v-if="query.tagIds && query.tagIds !== 'none'" />
+                                                        <template :key="transactionTagGroup.id"
+                                                                  v-for="transactionTagGroup in allTransactionTagGroupsWithDefault">
+                                                            <v-divider v-if="allTransactionTagsByGroup[transactionTagGroup.id] && allTransactionTagsByGroup[transactionTagGroup.id]?.length && hasVisibleTagsInTagGroup(transactionTagGroup)" />
 
-                                                        <template v-if="query.tagIds && query.tagIds !== 'none'">
-                                                            <v-list-item class="text-sm" density="compact"
-                                                                         :key="filterType.type"
-                                                                         :value="filterType.type"
-                                                                         :append-icon="(query.tagFilterType === filterType.type ? mdiCheck : undefined)"
-                                                                         v-for="filterType in allTransactionTagFilterTypes">
-                                                                <v-list-item-title class="cursor-pointer"
-                                                                                   @click="changeTagFilterType(filterType.type)">
-                                                                    <div class="d-flex align-center">
-                                                                        <v-icon size="24" :icon="filterType.icon"/>
-                                                                        <span class="text-sm ms-3">{{ filterType.displayName }}</span>
-                                                                    </div>
+                                                            <v-list-item density="compact" v-if="allTransactionTagsByGroup[transactionTagGroup.id] && allTransactionTagsByGroup[transactionTagGroup.id]?.length && hasVisibleTagsInTagGroup(transactionTagGroup)">
+                                                                <v-list-item-title>
+                                                                    <span class="text-sm">{{ transactionTagGroup.name }}</span>
                                                                 </v-list-item-title>
                                                             </v-list-item>
-                                                        </template>
 
-                                                        <template :key="transactionTag.id"
-                                                                  v-for="transactionTag in allTransactionTags">
-                                                            <v-divider v-if="!transactionTag.hidden || query.tagIds === transactionTag.id" />
-                                                            <v-list-item class="text-sm" density="compact"
-                                                                         :value="transactionTag.id"
-                                                                         :class="{ 'list-item-selected': query.tagIds === transactionTag.id, 'item-in-multiple-selection': queryAllFilterTagIdsCount > 1 && queryAllFilterTagIds[transactionTag.id] }"
-                                                                         :append-icon="(query.tagIds === transactionTag.id ? mdiCheck : undefined)"
-                                                                         v-if="!transactionTag.hidden || query.tagIds === transactionTag.id">
-                                                                <v-list-item-title class="cursor-pointer"
-                                                                                   @click="changeTagFilter(transactionTag.id)">
-                                                                    <div class="d-flex align-center">
-                                                                        <v-icon size="24" :icon="mdiPound"/>
-                                                                        <span class="text-sm ms-3">{{ transactionTag.name }}</span>
-                                                                    </div>
-                                                                </v-list-item-title>
-                                                            </v-list-item>
+                                                            <template :key="transactionTag.id"
+                                                                      v-for="(transactionTag, index) in (allTransactionTagsByGroup[transactionTagGroup.id] ?? [])">
+                                                                <v-divider v-if="index > 0 && (!transactionTag.hidden || isDefined(queryAllFilterTagIds[transactionTag.id]))" />
+                                                                <v-list-item class="text-sm" density="compact"
+                                                                             :value="transactionTag.id"
+                                                                             :class="{ 'list-item-selected': queryAllFilterTagIdsCount === 1 && isDefined(queryAllFilterTagIds[transactionTag.id]), 'item-in-multiple-selection': queryAllFilterTagIdsCount > 1 && isDefined(queryAllFilterTagIds[transactionTag.id]) }"
+                                                                             :append-icon="(queryAllFilterTagIds[transactionTag.id] === true ? mdiCheck : (queryAllFilterTagIds[transactionTag.id] === false ? mdiClose : undefined))"
+                                                                             v-if="!transactionTag.hidden || isDefined(queryAllFilterTagIds[transactionTag.id])">
+                                                                    <v-list-item-title class="cursor-pointer"
+                                                                                       @click="changeTagFilter(TransactionTagFilter.of(transactionTag.id).toTextualTagFilter())">
+                                                                        <div class="d-flex align-center">
+                                                                            <v-icon size="24" :icon="mdiPound"/>
+                                                                            <span class="text-sm ms-3">{{ transactionTag.name }}</span>
+                                                                        </div>
+                                                                    </v-list-item-title>
+                                                                </v-list-item>
+                                                            </template>
                                                         </template>
                                                     </v-list>
                                                 </v-menu>
@@ -527,7 +529,7 @@
                                                :class="{ 'disabled': loading, 'has-bottom-border': idx < transactions.length - 1 }"
                                                v-for="(transaction, idx) in transactions">
                                             <tr class="transaction-list-row-date no-hover text-sm"
-                                                v-if="pageType === TransactionListPageType.List.type && (idx === 0 || (idx > 0 && (transaction.gregorianCalendarYearDashMonthDashDay !== transactions[idx - 1].gregorianCalendarYearDashMonthDashDay)))">
+                                                v-if="pageType === TransactionListPageType.List.type && (idx === 0 || (idx > 0 && (transaction.gregorianCalendarYearDashMonthDashDay !== transactions[idx - 1]!.gregorianCalendarYearDashMonthDashDay)))">
                                                 <td :colspan="showTagInTransactionListPage ? 6 : 5" class="font-weight-bold">
                                                     <div class="d-flex align-center">
                                                         <span>{{ getDisplayLongDate(transaction) }}</span>
@@ -543,8 +545,8 @@
                                                 <td class="transaction-table-column-time">
                                                     <div class="d-flex flex-column">
                                                         <span>{{ getDisplayTime(transaction) }}</span>
-                                                        <span class="text-caption" v-if="transaction.utcOffset !== currentTimezoneOffsetMinutes">{{ getDisplayTimezone(transaction) }}</span>
-                                                        <v-tooltip activator="parent" v-if="transaction.utcOffset !== currentTimezoneOffsetMinutes">{{ getDisplayTimeInDefaultTimezone(transaction) }}</v-tooltip>
+                                                        <span class="text-caption" v-if="!isSameAsDefaultTimezoneOffsetMinutes(transaction)">{{ getDisplayTimezone(transaction) }}</span>
+                                                        <v-tooltip activator="parent" v-if="!isSameAsDefaultTimezoneOffsetMinutes(transaction)">{{ getDisplayTimeInDefaultTimezone(transaction) }}</v-tooltip>
                                                     </div>
                                                 </td>
                                                 <td class="transaction-table-column-category">
@@ -579,7 +581,7 @@
                                                 </td>
                                                 <td class="transaction-table-column-tags" v-if="showTagInTransactionListPage">
                                                     <v-chip class="transaction-tag" size="small" :prepend-icon="mdiPound"
-                                                            :text="allTransactionTags[tagId].name"
+                                                            :text="allTransactionTags[tagId]?.name"
                                                             :key="tagId"
                                                             v-for="tagId in transaction.tagIds"/>
                                                     <v-chip class="transaction-tag" size="small"
@@ -620,6 +622,7 @@
                             @error="onShowDateRangeError" />
 
     <edit-dialog ref="editDialog" :type="TransactionEditPageType.Transaction" />
+    <a-i-image-recognition-dialog ref="aiImageRecognitionDialog" />
     <import-dialog ref="importDialog" :persistent="true" />
 
     <v-dialog width="800" v-model="showFilterAccountDialog">
@@ -647,6 +650,7 @@ import PaginationButtons from '@/components/desktop/PaginationButtons.vue';
 import ConfirmDialog from '@/components/desktop/ConfirmDialog.vue';
 import SnackBar from '@/components/desktop/SnackBar.vue';
 import EditDialog from './list/dialogs/EditDialog.vue';
+import AIImageRecognitionDialog from './list/dialogs/AIImageRecognitionDialog.vue';
 import ImportDialog from './import/ImportDialog.vue';
 import AccountFilterSettingsCard from '@/views/desktop/common/cards/AccountFilterSettingsCard.vue';
 import CategoryFilterSettingsCard from '@/views/desktop/common/cards/CategoryFilterSettingsCard.vue';
@@ -669,7 +673,10 @@ import { useTransactionsStore } from '@/stores/transaction.ts';
 import { useTransactionTemplatesStore } from '@/stores/transactionTemplate.ts';
 import { useDesktopPageStore } from '@/stores/desktopPage.ts';
 
-import type { NameNumeralValue, TypeAndDisplayName } from '@/core/base.ts';
+import {
+    type NameNumeralValue,
+    keys
+} from '@/core/base.ts';
 import {
     type Year0BasedMonth,
     type LocalizedRecentMonthDateRange,
@@ -679,23 +686,23 @@ import {
 } from '@/core/datetime.ts';
 import { type NumeralSystem, AmountFilterType } from '@/core/numeral.ts';
 import { ThemeType } from '@/core/theme.ts';
-import { TransactionType, TransactionTagFilterType } from '@/core/transaction.ts';
+import { TransactionType } from '@/core/transaction.ts';
 import { TemplateType }  from '@/core/template.ts';
 import type { TransactionCategory } from '@/models/transaction_category.ts';
-import type { Transaction } from '@/models/transaction.ts';
+import { type Transaction, TransactionTagFilter } from '@/models/transaction.ts';
 import type { TransactionTemplate } from '@/models/transaction_template.ts';
 
 import {
+    isDefined,
     isObject,
     isString,
-    isNumber
+    isNumber,
+    objectFieldWithValueToArrayItem
 } from '@/lib/common.ts';
 import {
     getCurrentUnixTime,
     parseDateTimeFromUnixTime,
-    getBrowserTimezoneOffsetMinutes,
-    getActualUnixTimeForStore,
-    getDayFirstUnixTimeBySpecifiedUnixTime,
+    getDayFirstDateTimeBySpecifiedUnixTime,
     getYearMonthFirstUnixTime,
     getYearMonthLastUnixTime,
     getShiftedDateRangeAndDateType,
@@ -712,14 +719,14 @@ import {
     categoryTypeToTransactionType,
     transactionTypeToCategoryType
 } from '@/lib/category.ts';
-import { isDataExportingEnabled, isDataImportingEnabled } from '@/lib/server_settings.ts';
-import { startDownloadFile } from '@/lib/ui/common.ts';
-import { scrollToSelectedItem } from '@/lib/ui/desktop.ts';
+import { isDataExportingEnabled, isDataImportingEnabled, isTransactionFromAIImageRecognitionEnabled } from '@/lib/server_settings.ts';
+import { scrollToSelectedItem, startDownloadFile } from '@/lib/ui/common.ts';
 import logger from '@/lib/logger.ts';
 
 import {
     mdiMagnify,
     mdiCheck,
+    mdiClose,
     mdiViewGridOutline,
     mdiBorderNoneVariant,
     mdiVectorArrangeBelow,
@@ -729,11 +736,8 @@ import {
     mdiPencilBoxOutline,
     mdiArrowLeft,
     mdiArrowRight,
-    mdiPlusBoxMultipleOutline,
-    mdiCheckboxMultipleOutline,
-    mdiMinusBoxMultipleOutline,
-    mdiCloseBoxMultipleOutline,
     mdiPound,
+    mdiMagicStaff,
     mdiTextBoxOutline
 } from '@mdi/js';
 
@@ -745,8 +749,7 @@ interface TransactionListProps {
     initType?: string,
     initCategoryIds?: string,
     initAccountIds?: string,
-    initTagIds?: string,
-    initTagFilterType?: string,
+    initTagFilter?: string,
     initAmountFilter?: string,
     initKeyword?: string
 }
@@ -756,13 +759,8 @@ const props = defineProps<TransactionListProps>();
 type ConfirmDialogType = InstanceType<typeof ConfirmDialog>;
 type SnackBarType = InstanceType<typeof SnackBar>;
 type EditDialogType = InstanceType<typeof EditDialog>;
+type AIImageRecognitionDialogType = InstanceType<typeof AIImageRecognitionDialog>;
 type ImportDialogType = InstanceType<typeof ImportDialog>;
-
-interface TransactionTemplateWithIcon {
-    type: number;
-    displayName: string;
-    icon: string;
-}
 
 interface TransactionListDisplayTotalAmount {
     income: string;
@@ -776,7 +774,6 @@ const theme = useTheme();
 const {
     tt,
     getAllRecentMonthDateRanges,
-    getAllTransactionTagFilterTypes,
     getWeekdayLongName,
     getCurrentNumeralSystemType
 } = useI18n();
@@ -787,7 +784,6 @@ const {
     customMinDatetime,
     customMaxDatetime,
     currentCalendarDate,
-    currentTimezoneOffsetMinutes,
     firstDayOfWeek,
     fiscalYearStart,
     defaultCurrency,
@@ -800,6 +796,8 @@ const {
     allCategories,
     allPrimaryCategories,
     allAvailableCategoriesCount,
+    allTransactionTagGroupsWithDefault,
+    allTransactionTagsByGroup,
     allTransactionTags,
     allAvailableTagsCount,
     query,
@@ -820,6 +818,9 @@ const {
     transactionCalendarMinDate,
     transactionCalendarMaxDate,
     currentMonthTransactionData,
+    hasSubCategoryInQuery,
+    hasVisibleTagsInTagGroup,
+    isSameAsDefaultTimezoneOffsetMinutes,
     canAddTransaction,
     getDisplayTime,
     getDisplayLongDate,
@@ -839,13 +840,6 @@ const transactionsStore = useTransactionsStore();
 const transactionTemplatesStore = useTransactionTemplatesStore();
 const desktopPageStore = useDesktopPageStore();
 
-const tagFilterIconMap: Record<number, string> = {
-    [TransactionTagFilterType.HasAny.type]: mdiPlusBoxMultipleOutline,
-    [TransactionTagFilterType.HasAll.type]: mdiCheckboxMultipleOutline,
-    [TransactionTagFilterType.NotHasAny.type]: mdiMinusBoxMultipleOutline,
-    [TransactionTagFilterType.NotHasAll.type]: mdiCloseBoxMultipleOutline
-};
-
 const timeFilterMenu = useTemplateRef<VMenu>('timeFilterMenu');
 const categoryFilterMenu = useTemplateRef<VMenu>('categoryFilterMenu');
 const amountFilterMenu = useTemplateRef<VMenu>('amountFilterMenu');
@@ -855,6 +849,7 @@ const tagFilterMenu = useTemplateRef<VMenu>('tagFilterMenu');
 const confirmDialog = useTemplateRef<ConfirmDialogType>('confirmDialog');
 const snackbar = useTemplateRef<SnackBarType>('snackbar');
 const editDialog = useTemplateRef<EditDialogType>('editDialog');
+const aiImageRecognitionDialog = useTemplateRef<AIImageRecognitionDialogType>('aiImageRecognitionDialog');
 const importDialog = useTemplateRef<ImportDialogType>('importDialog');
 
 const activeTab = ref<string>('transactionPage');
@@ -884,8 +879,7 @@ const allPageCounts = computed<NameNumeralValue[]>(() => {
     const pageCounts: NameNumeralValue[] = [];
     const availableCountPerPage: number[] = [ 5, 10, 15, 20, 25, 30, 50 ];
 
-    for (let i = 0; i < availableCountPerPage.length; i++) {
-        const count = availableCountPerPage[i];
+    for (const count of availableCountPerPage) {
         pageCounts.push({ value: count, name: numeralSystem.value.replaceWesternArabicDigitsToLocalizedDigits(count.toString()) });
     }
 
@@ -897,21 +891,6 @@ const recentMonthDateRanges = computed<LocalizedRecentMonthDateRange[]>(() => ge
 const allTransactionTemplates = computed<TransactionTemplate[]>(() => {
     const allTemplates = transactionTemplatesStore.allVisibleTemplates;
     return allTemplates[TemplateType.Normal.type] || [];
-});
-
-const allTransactionTagFilterTypes = computed<TransactionTemplateWithIcon[]>(() => {
-    const allTagFilterTypes: TypeAndDisplayName[] = getAllTransactionTagFilterTypes();
-    const allTagFilterTypesWithIcon: TransactionTemplateWithIcon[] = [];
-
-    for (let i = 0; i < allTagFilterTypes.length; i++) {
-        allTagFilterTypesWithIcon.push({
-            type: allTagFilterTypes[i].type,
-            displayName: allTagFilterTypes[i].displayName,
-            icon: tagFilterIconMap[allTagFilterTypes[i].type]
-        });
-    }
-
-    return allTagFilterTypesWithIcon;
 });
 
 const allowCategoryTypes = computed<string>(() => {
@@ -948,9 +927,7 @@ const transactions = computed<Transaction[]>(() => {
 
             const transactions :Transaction[] = [];
 
-            for (let i = 0; i < transactionData.items.length; i++) {
-                const transaction = transactionData.items[i];
-
+            for (const transaction of transactionData.items) {
                 if (transaction.gregorianCalendarYearDashMonthDashDay === currentCalendarDate.value) {
                     transactions.push(transaction);
                 }
@@ -972,7 +949,7 @@ const recentDateRangeIndex = computed<number>({
             value = 0;
         }
 
-        changeDateFilter(recentMonthDateRanges.value[value]);
+        changeDateFilter(recentMonthDateRanges.value[value] as LocalizedRecentMonthDateRange);
     }
 });
 
@@ -1007,10 +984,16 @@ const queryAllSelectedFilterAccountIds = computed<string>(() => {
 });
 
 const queryAllSelectedFilterTagIds = computed<string>(() => {
-    if (queryAllFilterTagIdsCount.value === 0) {
+    if (query.value.tagFilter === TransactionTagFilter.TransactionNoTagFilterValue) {
+        return TransactionTagFilter.TransactionNoTagFilterValue;
+    } else if (queryAllFilterTagIdsCount.value === 0) {
         return '';
     } else if (queryAllFilterTagIdsCount.value === 1) {
-        return query.value.tagIds;
+        for (const tagId of keys(queryAllFilterTagIds.value)) {
+            return tagId;
+        }
+
+        return '';
     } else { // queryAllFilterTagIdsCount.value > 1
         return 'multiple';
     }
@@ -1089,8 +1072,8 @@ function getCategoryListItemCheckedClass(category: TransactionCategory, queryCat
     }
 
     if (category.subCategories) {
-        for (let i = 0; i < category.subCategories.length; i++) {
-            if (queryCategoryIds && queryCategoryIds[category.subCategories[i].id]) {
+        for (const subCategory of category.subCategories) {
+            if (queryCategoryIds && queryCategoryIds[subCategory.id]) {
                 return {
                     'list-item-selected': true,
                     'has-children-item-selected': true
@@ -1136,8 +1119,7 @@ function init(initProps: TransactionListProps): void {
         type: initProps.initType && parseInt(initProps.initType) > 0 ? parseInt(initProps.initType) : undefined,
         categoryIds: initProps.initCategoryIds,
         accountIds: initProps.initAccountIds,
-        tagIds: initProps.initTagIds,
-        tagFilterType: initProps.initTagFilterType && parseInt(initProps.initTagFilterType) >= 0 ? parseInt(initProps.initTagFilterType) : undefined,
+        tagFilter: initProps.initTagFilter,
         amountFilter: initProps.initAmountFilter || '',
         keyword: initProps.initKeyword || ''
     });
@@ -1264,8 +1246,8 @@ function changePageType(type: number): void {
 function changeDateFilter(dateRange: TimeRangeAndDateType | number | null): void {
     if (dateRange === DateRange.Custom.type || (isObject(dateRange) && dateRange.dateType === DateRange.Custom.type && !dateRange.minTime && !dateRange.maxTime)) { // Custom
         if (!query.value.minTime || !query.value.maxTime) {
-            customMaxDatetime.value = getActualUnixTimeForStore(getCurrentUnixTime(), currentTimezoneOffsetMinutes.value, getBrowserTimezoneOffsetMinutes());
-            customMinDatetime.value = getDayFirstUnixTimeBySpecifiedUnixTime(customMaxDatetime.value);
+            customMaxDatetime.value = getCurrentUnixTime();
+            customMinDatetime.value = getDayFirstDateTimeBySpecifiedUnixTime(customMaxDatetime.value).getUnixTime();
         } else {
             customMaxDatetime.value = query.value.maxTime;
             customMinDatetime.value = query.value.minTime;
@@ -1382,7 +1364,7 @@ function changeCustomMonthDateFilter(yearMonth: Year0BasedMonth): void {
 }
 
 function shiftDateRange(startTime: number, endTime: number, scale: number): void {
-    if (recentMonthDateRanges.value[recentDateRangeIndex.value].dateType === DateRange.All.type) {
+    if (recentMonthDateRanges.value[recentDateRangeIndex.value]?.dateType === DateRange.All.type) {
         return;
     }
 
@@ -1421,11 +1403,7 @@ function changeTypeFilter(type: number): void {
     if (type && query.value.categoryIds) {
         newCategoryFilter = '';
 
-        for (const categoryId in queryAllFilterCategoryIds.value) {
-            if (!Object.prototype.hasOwnProperty.call(queryAllFilterCategoryIds.value, categoryId)) {
-                continue;
-            }
-
+        for (const categoryId of keys(queryAllFilterCategoryIds.value)) {
             const category = allCategories.value[categoryId];
 
             if (category && category.type === transactionTypeToCategoryType(type)) {
@@ -1483,13 +1461,13 @@ function changeMultipleAccountsFilter(changed: boolean): void {
     updateUrlWhenChanged(changed);
 }
 
-function changeTagFilter(tagIds: string): void {
-    if (query.value.tagIds === tagIds) {
+function changeTagFilter(tagFilter: string): void {
+    if (query.value.tagFilter === tagFilter) {
         return;
     }
 
     const changed = transactionsStore.updateTransactionListFilter({
-        tagIds: tagIds
+        tagFilter: tagFilter
     });
 
     updateUrlWhenChanged(changed);
@@ -1497,18 +1475,6 @@ function changeTagFilter(tagIds: string): void {
 
 function changeMultipleTagsFilter(changed: boolean): void {
     showFilterTagDialog.value = false;
-
-    updateUrlWhenChanged(changed);
-}
-
-function changeTagFilterType(filterType: number): void {
-    if (query.value.tagFilterType === filterType) {
-        return;
-    }
-
-    const changed = transactionsStore.updateTransactionListFilter({
-        tagFilterType: filterType
-    });
 
     updateUrlWhenChanged(changed);
 }
@@ -1585,7 +1551,7 @@ function add(template?: TransactionTemplate): void {
         type: query.value.type,
         categoryId: queryAllFilterCategoryIdsCount.value === 1 ? query.value.categoryIds : '',
         accountId: queryAllFilterAccountIdsCount.value === 1 ? query.value.accountIds : '',
-        tagIds: query.value.tagIds || '',
+        tagIds: objectFieldWithValueToArrayItem(queryAllFilterTagIds.value, true).join(',') || '',
         template: template
     }).then(result => {
         if (result && result.message) {
@@ -1597,6 +1563,33 @@ function add(template?: TransactionTemplate): void {
         if (error) {
             snackbar.value?.showError(error);
         }
+    });
+}
+
+function addByRecognizingImage(): void {
+    aiImageRecognitionDialog.value?.open().then(result => {
+        editDialog.value?.open({
+            time: result.time,
+            type: result.type,
+            categoryId: result.categoryId,
+            accountId: result.sourceAccountId,
+            destinationAccountId: result.destinationAccountId,
+            amount: result.sourceAmount,
+            destinationAmount: result.destinationAmount,
+            tagIds: result.tagIds ? result.tagIds.join(',') : undefined,
+            comment: result.comment,
+            noTransactionDraft: true
+        }).then(result => {
+            if (result && result.message) {
+                snackbar.value?.showMessage(result.message);
+            }
+
+            reload(false, false);
+        }).catch(error => {
+            if (error) {
+                snackbar.value?.showError(error);
+            }
+        });
     });
 }
 
@@ -1680,13 +1673,13 @@ function scrollAmountMenuToSelectedItem(opened: boolean): void {
         if (isString(query.value.amountFilter)) {
             try {
                 const filterItems = query.value.amountFilter.split(':');
-                const amountCount = getAmountFilterParameterCount(filterItems[0]);
+                const amountCount = getAmountFilterParameterCount(filterItems[0] as string);
 
                 if (filterItems.length === 2 && amountCount === 1) {
-                    amount1 = parseInt(filterItems[1]);
+                    amount1 = parseInt(filterItems[1] as string);
                 } else if (filterItems.length === 3 && amountCount === 2) {
-                    amount1 = parseInt(filterItems[1]);
-                    amount2 = parseInt(filterItems[2]);
+                    amount1 = parseInt(filterItems[1] as string);
+                    amount2 = parseInt(filterItems[2] as string);
                 }
             } catch (ex) {
                 logger.warn('cannot parse amount from filter value, original value is ' + query.value.amountFilter, ex);
@@ -1714,7 +1707,7 @@ function scrollTagMenuToSelectedItem(opened: boolean): void {
 
 function scrollMenuToSelectedItem(menu: VMenu | null): void {
     nextTick(() => {
-        scrollToSelectedItem(menu?.contentEl, 'div.v-list', 'div.v-list-item.list-item-selected');
+        scrollToSelectedItem(menu?.contentEl, 'div.v-list', 'div.v-list', 'div.v-list-item.list-item-selected');
     });
 }
 
@@ -1731,8 +1724,7 @@ onBeforeRouteUpdate((to) => {
             initType: (to.query['type'] as string | null) || undefined,
             initCategoryIds: (to.query['categoryIds'] as string | null) || undefined,
             initAccountIds: (to.query['accountIds'] as string | null) || undefined,
-            initTagIds: (to.query['tagIds'] as string | null) || undefined,
-            initTagFilterType: (to.query['tagFilterType'] as string | null) || undefined,
+            initTagFilter: (to.query['tagFilter'] as string | null) || undefined,
             initAmountFilter: (to.query['amountFilter'] as string | null) || undefined,
             initKeyword: (to.query['keyword'] as string | null) || undefined
         });
@@ -1761,12 +1753,16 @@ init(props);
 
 <style>
 .transaction-keyword-filter .v-input--density-compact {
-    --v-input-control-height: 36px !important;
+    --v-input-control-height: 38px !important;
     --v-input-padding-top: 5px !important;
     --v-input-padding-bottom: 5px !important;
     --v-input-chips-margin-top: 0px !important;
     --v-input-chips-margin-bottom: 0px !important;
     inline-size: 20rem;
+
+    .v-field__input {
+        min-block-size: 38px !important;
+    }
 }
 
 .transaction-list-datetime-range {
@@ -1779,9 +1775,21 @@ init(props);
     line-height: 1rem;
 }
 
-
 .transaction-list-datetime-range .transaction-list-datetime-range-text {
     color: rgba(var(--v-theme-on-background), var(--v-medium-emphasis-opacity)) !important;
+}
+
+.v-table.transaction-table > .v-table__wrapper > table {
+    th:not(:last-child),
+    td:not(:last-child) {
+        width: auto !important;
+        white-space: nowrap;
+    }
+
+    th:last-child,
+    td:last-child {
+        width: 100% !important;
+    }
 }
 
 .v-table.transaction-table .transaction-list-row-date > td {
@@ -1789,32 +1797,23 @@ init(props);
 }
 
 .transaction-table .transaction-table-column-time {
-    width: 110px;
-    white-space: nowrap;
+    min-width: 110px;
 }
 
 .transaction-table .transaction-table-column-category {
-    width: 140px;
-    white-space: nowrap;
+    min-width: 140px;
 }
 
 .transaction-table .transaction-table-column-amount {
-    width: 120px;
-    white-space: nowrap;
+    min-width: 120px;
 }
 
 .transaction-table .transaction-table-column-account {
-    width: 160px;
-    white-space: nowrap;
+    min-width: 160px;
 }
 
 .transaction-table .transaction-table-column-tags {
-    width: 90px;
-    max-width: 300px;
-}
-
-.transaction-table-column-description {
-    max-width: 300px;
+    min-width: 90px;
 }
 
 .transaction-table .transaction-table-column-category .v-btn,

@@ -85,7 +85,7 @@ func (a *TwoFactorAuthorizationsApi) TwoFactorEnableRequestHandler(c *core.WebCo
 		return nil, errs.ErrNotPermittedToPerformThisAction
 	}
 
-	key, err := a.twoFactorAuthorizations.GenerateTwoFactorSecret(c, user)
+	key, err := a.twoFactorAuthorizations.GenerateTwoFactorSecret(c, user, c.GetClientLocale())
 
 	if err != nil {
 		log.Errorf(c, "[twofactor_authorizations.TwoFactorEnableRequestHandler] failed to generate two-factor secret, because %s", err.Error())
@@ -205,6 +205,7 @@ func (a *TwoFactorAuthorizationsApi) TwoFactorEnableConfirmHandler(c *core.WebCo
 
 	c.SetTextualToken(token)
 	c.SetTokenClaims(claims)
+	c.SetTokenContext("")
 
 	log.Infof(c, "[twofactor_authorizations.TwoFactorEnableConfirmHandler] user \"uid:%d\" token refreshed, new token will be expired at %d", user.Uid, claims.ExpiresAt)
 

@@ -44,6 +44,12 @@
                         <span class="nav-item-title">{{ tt('Statistics & Analysis') }}</span>
                     </router-link>
                 </li>
+                <li class="nav-link">
+                    <router-link to="/insights/explorer">
+                        <v-icon class="nav-item-icon" :icon="mdiCompassOutline"/>
+                        <span class="nav-item-title">{{ tt('Insights Explorer') }}</span>
+                    </router-link>
+                </li>
                 <li class="nav-section-title">
                     <div class="title-wrapper">
                         <span class="title-text">{{ tt('Basis Data') }}</span>
@@ -152,7 +158,7 @@
                                                 </v-avatar>
                                             </v-list-item-action>
                                         </template>
-                                        <v-list-item-title class="ms-2 font-weight-semibold">
+                                        <v-list-item-title class="ms-2">
                                             {{ currentNickName }}
                                         </v-list-item-title>
                                     </v-list-item>
@@ -214,8 +220,11 @@ import { useDesktopPageStore } from '@/stores/desktopPage.ts';
 
 import { APPLICATION_LOGO_PATH } from '@/consts/asset.ts';
 import { ThemeType } from '@/core/theme.ts';
+
+import { getShareCacheImageBlob } from '@/lib/cache.ts';
 import { isUserScheduledTransactionEnabled } from '@/lib/server_settings.ts';
 import { getSystemTheme, setExpenseAndIncomeAmountColor } from '@/lib/ui/common.ts';
+import logger from '@/lib/logger.ts';
 
 import {
     mdiMenu,
@@ -228,6 +237,7 @@ import {
     mdiClipboardTextOutline,
     mdiClipboardTextClockOutline,
     mdiChartPieOutline,
+    mdiCompassOutline,
     mdiSwapHorizontal,
     mdiCogOutline,
     mdiCellphone,
@@ -293,6 +303,14 @@ function handleNavScroll(e: Event): void {
     isVerticalNavScrolled.value = (e.target as HTMLElement).scrollTop > 0;
 }
 
+function clearShareImageCache(): void {
+    getShareCacheImageBlob().then(blob => {
+        if (blob) {
+            logger.warn('desktop version does not support receving shared image, the share image cache has been cleared');
+        }
+    });
+}
+
 function lock(): void {
     rootStore.lock();
     router.replace('/unlock');
@@ -327,6 +345,8 @@ function logout(): void {
 function showAddDialogInTransactionListPage(): void {
     desktopPageStore.setShowAddTransactionDialogInTransactionList();
 }
+
+clearShareImageCache();
 </script>
 
 <style>

@@ -4,6 +4,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -13,6 +14,7 @@ import (
 const webContextRequestIdFieldKey = "REQUEST_ID"
 const webContextTextualTokenFieldKey = "TOKEN_STRING"
 const webContextTokenClaimsFieldKey = "TOKEN_CLAIMS"
+const webContextTokenContextFieldKey = "TOKEN_CONTEXT"
 const webContextResponseErrorFieldKey = "RESPONSE_ERROR"
 
 // AcceptLanguageHeaderName represents the header name of accept language
@@ -23,6 +25,9 @@ const RemoteClientPortHeader = "X-Real-Port"
 
 // ClientTimezoneOffsetHeaderName represents the header name of client timezone offset
 const ClientTimezoneOffsetHeaderName = "X-Timezone-Offset"
+
+// ClientTimezoneNameHeaderName represents the header name of client timezone name
+const ClientTimezoneNameHeaderName = "X-Timezone-Name"
 
 const tokenHeaderName = "Authorization"
 const tokenHeaderValuePrefix = "bearer "
@@ -113,6 +118,22 @@ func (c *WebContext) GetTokenClaims() *UserTokenClaims {
 	return claims.(*UserTokenClaims)
 }
 
+// SetTokenContext sets the given user token context to context
+func (c *WebContext) SetTokenContext(context string) {
+	c.Set(webContextTokenContextFieldKey, context)
+}
+
+// GetTokenContext returns the current user token context
+func (c *WebContext) GetTokenContext() string {
+	context, exists := c.Get(webContextTokenContextFieldKey)
+
+	if !exists {
+		return ""
+	}
+
+	return context.(string)
+}
+
 // GetCurrentUid returns the current user uid by the current user token
 func (c *WebContext) GetCurrentUid() int64 {
 	claims := c.GetTokenClaims()
@@ -166,16 +187,24 @@ func (c *WebContext) GetClientLocale() string {
 	return value
 }
 
-// GetClientTimezoneOffset returns the client timezone offset
-func (c *WebContext) GetClientTimezoneOffset() (int16, error) {
-	value := c.GetHeader(ClientTimezoneOffsetHeaderName)
-	offset, err := strconv.Atoi(value)
+func (c *WebContext) GetClientTimezone() (*time.Location, error) {
+	timezoneName := c.getClientTimezoneName()
 
-	if err != nil {
-		return 0, err
+	if timezoneName != "" {
+		location, err := time.LoadLocation(timezoneName)
+
+		if err == nil && location != nil {
+			return location, nil
+		}
 	}
 
-	return int16(offset), nil
+	utcOffset, err := c.getClientTimezoneOffset()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return time.FixedZone("Client Fixed Timezone", int(utcOffset)*60), nil
 }
 
 // SetResponseError sets the response error
@@ -192,6 +221,25 @@ func (c *WebContext) GetResponseError() *errs.Error {
 	}
 
 	return err.(*errs.Error)
+}
+
+// GetClientTimezoneOffset returns the client timezone offset
+func (c *WebContext) getClientTimezoneOffset() (int16, error) {
+	value := c.GetHeader(ClientTimezoneOffsetHeaderName)
+	offset, err := strconv.Atoi(value)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return int16(offset), nil
+}
+
+// GetClientTimezoneName returns the client timezone name
+func (c *WebContext) getClientTimezoneName() string {
+	value := c.GetHeader(ClientTimezoneNameHeaderName)
+
+	return value
 }
 
 // WrapWebContext returns a context wrapped by this file

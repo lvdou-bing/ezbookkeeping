@@ -41,6 +41,7 @@ import { DISPLAY_HIDDEN_AMOUNT, INCOMPLETE_AMOUNT_SUFFIX } from '@/consts/numera
 
 import { type TransactionMonthlyIncomeAndExpenseData } from '@/models/transaction.ts';
 
+import { parseDateTimeFromUnixTime } from '@/lib/datetime.ts';
 import { getExpenseAndIncomeAmountColor } from '@/lib/ui/common.ts';
 
 export interface MonthlyIncomeAndExpenseCardClickEvent {
@@ -63,7 +64,7 @@ const emit = defineEmits<{
 const {
     tt,
     getCurrentLanguageTextDirection,
-    formatUnixTimeToGregorianLikeShortMonth,
+    formatDateTimeToGregorianLikeShortMonth,
     formatAmountToLocalizedNumeralsWithCurrency
 } = useI18n();
 
@@ -78,9 +79,7 @@ const hasAnyData = computed<boolean>(() => {
         return false;
     }
 
-    for (let i = 0; i < props.data.length; i++) {
-        const item = props.data[i];
-
+    for (const item of props.data) {
         if (item.incomeAmount > 0 || item.incomeAmount < 0 || item.expenseAmount > 0 || item.expenseAmount < 0) {
             return true;
         }
@@ -99,9 +98,9 @@ const chartOptions = computed<object>(() => {
     const expenseIncomeAmountColor = getExpenseAndIncomeAmountColor(userStore.currentUserExpenseAmountColor, userStore.currentUserIncomeAmountColor, props.isDarkMode);
 
     if (props.data) {
-        for (let i = 0; i < props.data.length; i++) {
-            const item = props.data[i];
-            const monthShortName = formatUnixTimeToGregorianLikeShortMonth(item.monthStartTime);
+        for (const item of props.data) {
+            const monthStartDateTime = parseDateTimeFromUnixTime(item.monthStartTime);
+            const monthShortName = formatDateTimeToGregorianLikeShortMonth(monthStartDateTime);
 
             monthNames.push(monthShortName);
             incomeAmounts.push(item.incomeAmount);
@@ -145,10 +144,9 @@ const chartOptions = computed<object>(() => {
                 let incomeAmount: string | null = null;
                 let expenseAmount: string | null = null;
 
-                for (let i = 0; i < params.length; i++) {
-                    const param = params[i];
+                for (const param of params) {
                     const dataIndex = param.dataIndex;
-                    const data = props.data[dataIndex];
+                    const data = props.data[dataIndex] as TransactionMonthlyIncomeAndExpenseData;
 
                     if (param.seriesId === 'seriesIncome') {
                         incomeAmount = getDisplayIncomeAmount(data);
@@ -160,7 +158,7 @@ const chartOptions = computed<object>(() => {
                 return `<table>` +
                     `<thead>` +
                     `<tr>` +
-                    `<td colspan="2" class="text-start">${params[0].name}</td>` +
+                    `<td colspan="2" class="text-start">${params[0]?.name}</td>` +
                     `</tr>` +
                     `</thead>` +
                     `<tbody>` +

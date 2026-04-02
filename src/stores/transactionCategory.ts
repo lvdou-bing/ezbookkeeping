@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 
 import type { BeforeResolveFunction } from '@/core/base.ts';
 
+import { itemAndIndex, values } from '@/core/base.ts';
 import { CategoryType } from '@/core/category.ts';
 
 import {
@@ -13,7 +14,7 @@ import {
 } from '@/models/transaction_category.ts';
 
 import { isEquals } from '@/lib/common.ts';
-import { getFirstAvailableCategoryId } from '@/lib/category.ts';
+import { getFirstVisibleCategoryId } from '@/lib/category.ts';
 import services, { type ApiResponsePromise } from '@/lib/services.ts';
 import logger from '@/lib/logger.ts';
 
@@ -22,54 +23,70 @@ export const useTransactionCategoriesStore = defineStore('transactionCategories'
     const allTransactionCategoriesMap = ref<Record<string, TransactionCategory>>({});
     const transactionCategoryListStateInvalid = ref<boolean>(true);
 
-    const hasAvailableExpenseCategories = computed<boolean>(() => {
+    const allAvailablePrimaryCategoriesCount = computed<number>(() => {
+        let count = 0;
+
+        for (const categories of values(allTransactionCategories.value)) {
+            count += categories.length;
+        }
+
+        return count;
+    });
+
+    const allAvailableSecondaryCategoriesCount = computed<number>(() => {
+        let count = 0;
+
+        for (const categories of values(allTransactionCategories.value)) {
+            for (const category of categories) {
+                if (category.subCategories) {
+                    count += category.subCategories.length;
+                }
+            }
+        }
+
+        return count;
+    });
+
+    const hasVisibleExpenseCategories = computed<boolean>(() => {
         if (!allTransactionCategories.value || !allTransactionCategories.value[CategoryType.Expense] || !allTransactionCategories.value[CategoryType.Expense].length) {
             return false;
         }
 
-        const firstAvailableCategoryId = getFirstAvailableCategoryId(allTransactionCategories.value[CategoryType.Expense]);
-        return firstAvailableCategoryId !== '';
+        const firstVisibleCategoryId = getFirstVisibleCategoryId(allTransactionCategories.value[CategoryType.Expense]);
+        return firstVisibleCategoryId !== '';
     });
 
-    const hasAvailableIncomeCategories = computed<boolean>(() => {
+    const hasVisibleIncomeCategories = computed<boolean>(() => {
         if (!allTransactionCategories.value || !allTransactionCategories.value[CategoryType.Income] || !allTransactionCategories.value[CategoryType.Income].length) {
             return false;
         }
 
-        const firstAvailableCategoryId = getFirstAvailableCategoryId(allTransactionCategories.value[CategoryType.Income]);
-        return firstAvailableCategoryId !== '';
+        const firstVisibleCategoryId = getFirstVisibleCategoryId(allTransactionCategories.value[CategoryType.Income]);
+        return firstVisibleCategoryId !== '';
     });
 
-    const hasAvailableTransferCategories = computed<boolean>(() => {
+    const hasVisibleTransferCategories = computed<boolean>(() => {
         if (!allTransactionCategories.value || !allTransactionCategories.value[CategoryType.Transfer] || !allTransactionCategories.value[CategoryType.Transfer].length) {
             return false;
         }
 
-        const firstAvailableCategoryId = getFirstAvailableCategoryId(allTransactionCategories.value[CategoryType.Transfer]);
-        return firstAvailableCategoryId !== '';
+        const firstVisibleCategoryId = getFirstVisibleCategoryId(allTransactionCategories.value[CategoryType.Transfer]);
+        return firstVisibleCategoryId !== '';
     });
 
     function loadTransactionCategoryList(allCategories: Record<number, TransactionCategory[]>): void {
         allTransactionCategories.value = allCategories;
         allTransactionCategoriesMap.value = {};
 
-        for (const categoryType in allCategories) {
-            if (!Object.prototype.hasOwnProperty.call(allCategories, categoryType)) {
-                continue;
-            }
-
-            const categories = allCategories[categoryType];
-
-            for (let i = 0; i < categories.length; i++) {
-                const category = categories[i];
+        for (const categories of values(allCategories)) {
+            for (const category of categories) {
                 allTransactionCategoriesMap.value[category.id] = category;
 
                 if (!category.subCategories) {
                     continue;
                 }
 
-                for (let j = 0; j < category.subCategories.length; j++) {
-                    const subCategory = category.subCategories[j];
+                for (const subCategory of category.subCategories) {
                     allTransactionCategoriesMap.value[subCategory.id] = subCategory;
                 }
             }
@@ -82,7 +99,7 @@ export const useTransactionCategoriesStore = defineStore('transactionCategories'
         if (!category.parentId || category.parentId === '0') {
             categoryList = allTransactionCategories.value[category.type];
         } else if (allTransactionCategoriesMap.value[category.parentId]) {
-            categoryList = allTransactionCategoriesMap.value[category.parentId].subCategories;
+            categoryList = allTransactionCategoriesMap.value[category.parentId]!.subCategories;
         }
 
         if (categoryList) {
@@ -92,33 +109,33 @@ export const useTransactionCategoriesStore = defineStore('transactionCategories'
         allTransactionCategoriesMap.value[category.id] = category;
     }
 
-    function updateCategoryInTransactionCategoryList(category: TransactionCategory, oldCategory: TransactionCategory): boolean {
-        if (oldCategory && category.parentId !== oldCategory.parentId) {
+    function updateCategoryInTransactionCategoryList(currentCategory: TransactionCategory, oldCategory?: TransactionCategory): boolean {
+        if (oldCategory && currentCategory.parentId !== oldCategory.parentId) {
             return false;
         }
 
         let categoryList: TransactionCategory[] | undefined = undefined;
 
-        if (!category.parentId || category.parentId === '0') {
-            categoryList = allTransactionCategories.value[category.type];
-        } else if (allTransactionCategoriesMap.value[category.parentId]) {
-            categoryList = allTransactionCategoriesMap.value[category.parentId].subCategories;
+        if (!currentCategory.parentId || currentCategory.parentId === '0') {
+            categoryList = allTransactionCategories.value[currentCategory.type];
+        } else if (allTransactionCategoriesMap.value[currentCategory.parentId]) {
+            categoryList = allTransactionCategoriesMap.value[currentCategory.parentId]!.subCategories;
         }
 
         if (categoryList) {
-            for (let i = 0; i < categoryList.length; i++) {
-                if (categoryList[i].id === category.id) {
-                    if (!category.parentId || category.parentId === '0') {
-                        category.subCategories = categoryList[i].subCategories;
+            for (const [category, index] of itemAndIndex(categoryList)) {
+                if (category.id === currentCategory.id) {
+                    if (!currentCategory.parentId || currentCategory.parentId === '0') {
+                        currentCategory.subCategories = category.subCategories;
                     }
 
-                    categoryList.splice(i, 1, category);
+                    categoryList.splice(index, 1, currentCategory);
                     break;
                 }
             }
         }
 
-        allTransactionCategoriesMap.value[category.id] = category;
+        allTransactionCategoriesMap.value[currentCategory.id] = currentCategory;
         return true;
     }
 
@@ -128,44 +145,43 @@ export const useTransactionCategoriesStore = defineStore('transactionCategories'
         if (!category.parentId || category.parentId === '0') {
             categoryList = allTransactionCategories.value[category.type];
         } else if (allTransactionCategoriesMap.value[category.parentId]) {
-            categoryList = allTransactionCategoriesMap.value[category.parentId].subCategories;
+            categoryList = allTransactionCategoriesMap.value[category.parentId]!.subCategories;
         }
 
         if (categoryList) {
-            categoryList.splice(to, 0, categoryList.splice(from, 1)[0]);
+            categoryList.splice(to, 0, categoryList.splice(from, 1)[0] as TransactionCategory);
         }
     }
 
     function updateCategoryVisibilityInTransactionCategoryList({ category, hidden }: { category: TransactionCategory, hidden: boolean }): void {
         if (allTransactionCategoriesMap.value[category.id]) {
-            allTransactionCategoriesMap.value[category.id].visible = !hidden;
+            allTransactionCategoriesMap.value[category.id]!.visible = !hidden;
         }
     }
 
-    function removeCategoryFromTransactionCategoryList(category: TransactionCategory): void {
+    function removeCategoryFromTransactionCategoryList(currentCategory: TransactionCategory): void {
         let categoryList: TransactionCategory[] | undefined = undefined;
 
-        if (!category.parentId || category.parentId === '0') {
-            categoryList = allTransactionCategories.value[category.type];
-        } else if (allTransactionCategoriesMap.value[category.parentId]) {
-            categoryList = allTransactionCategoriesMap.value[category.parentId].subCategories;
+        if (!currentCategory.parentId || currentCategory.parentId === '0') {
+            categoryList = allTransactionCategories.value[currentCategory.type];
+        } else if (allTransactionCategoriesMap.value[currentCategory.parentId]) {
+            categoryList = allTransactionCategoriesMap.value[currentCategory.parentId]!.subCategories;
         }
 
         if (categoryList) {
-            for (let i = 0; i < categoryList.length; i++) {
-                if (categoryList[i].id === category.id) {
-                    categoryList.splice(i, 1);
+            for (const [category, index] of itemAndIndex(categoryList)) {
+                if (category.id === currentCategory.id) {
+                    categoryList.splice(index, 1);
                     break;
                 }
             }
         }
 
-        if (allTransactionCategoriesMap.value[category.id] && allTransactionCategoriesMap.value[category.id].subCategories) {
-            const subCategoryList = allTransactionCategoriesMap.value[category.id].subCategories;
+        if (allTransactionCategoriesMap.value[currentCategory.id] && allTransactionCategoriesMap.value[currentCategory.id]!.subCategories) {
+            const subCategoryList = allTransactionCategoriesMap.value[currentCategory.id]!.subCategories;
 
             if (subCategoryList) {
-                for (let i = 0; i < subCategoryList.length; i++) {
-                    const subCategory = subCategoryList[i];
+                for (const subCategory of subCategoryList) {
                     if (allTransactionCategoriesMap.value[subCategory.id]) {
                         delete allTransactionCategoriesMap.value[subCategory.id];
                     }
@@ -173,8 +189,8 @@ export const useTransactionCategoriesStore = defineStore('transactionCategories'
             }
         }
 
-        if (allTransactionCategoriesMap.value[category.id]) {
-            delete allTransactionCategoriesMap.value[category.id];
+        if (allTransactionCategoriesMap.value[currentCategory.id]) {
+            delete allTransactionCategoriesMap.value[currentCategory.id];
         }
     }
 
@@ -403,12 +419,12 @@ export const useTransactionCategoriesStore = defineStore('transactionCategories'
 
             if (!category.parentId || category.parentId === '0') {
                 if (!allTransactionCategories.value[category.type] ||
-                    !allTransactionCategories.value[category.type][to]) {
+                    !allTransactionCategories.value[category.type]![to]) {
                     reject({ message: 'Unable to move category' });
                     return;
                 }
             } else {
-                const subCategoryList = allTransactionCategoriesMap.value[category.parentId].subCategories;
+                const subCategoryList = allTransactionCategoriesMap.value[category.parentId]?.subCategories;
 
                 if (!subCategoryList || !subCategoryList[to]) {
                     reject({ message: 'Unable to move category' });
@@ -438,10 +454,10 @@ export const useTransactionCategoriesStore = defineStore('transactionCategories'
         }
 
         if (categoryList) {
-            for (let i = 0; i < categoryList.length; i++) {
+            for (const [category, index] of itemAndIndex(categoryList)) {
                 newDisplayOrders.push({
-                    id: categoryList[i].id,
-                    displayOrder: i + 1
+                    id: category.id,
+                    displayOrder: index + 1
                 });
             }
         }
@@ -457,11 +473,13 @@ export const useTransactionCategoriesStore = defineStore('transactionCategories'
                     return;
                 }
 
-                if (transactionCategoryListStateInvalid.value) {
-                    updateTransactionCategoryListInvalidState(false);
-                }
+                loadAllCategories({ force: false }).finally(() => {
+                    if (transactionCategoryListStateInvalid.value) {
+                        updateTransactionCategoryListInvalidState(false);
+                    }
 
-                resolve(data.result);
+                    resolve(data.result);
+                });
             }).catch(error => {
                 logger.error('failed to save categories display order', error);
 
@@ -556,9 +574,11 @@ export const useTransactionCategoriesStore = defineStore('transactionCategories'
         allTransactionCategoriesMap,
         transactionCategoryListStateInvalid,
         // computed states
-        hasAvailableExpenseCategories,
-        hasAvailableIncomeCategories,
-        hasAvailableTransferCategories,
+        allAvailablePrimaryCategoriesCount,
+        allAvailableSecondaryCategoriesCount,
+        hasVisibleExpenseCategories,
+        hasVisibleIncomeCategories,
+        hasVisibleTransferCategories,
         // functions
         updateTransactionCategoryListInvalidState,
         resetTransactionCategories,

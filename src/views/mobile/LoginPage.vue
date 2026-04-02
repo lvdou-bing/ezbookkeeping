@@ -9,20 +9,26 @@
             <f7-block-footer>{{ tips }}</f7-block-footer>
         </f7-list>
 
-        <f7-list form dividers class="margin-bottom-half">
+        <f7-list form dividers class="margin-bottom-half" v-if="isInternalAuthEnabled()">
             <f7-list-input
                 type="text"
                 autocomplete="username"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                inputmode="email"
                 clear-button
+                :disabled="loggingInByPassword || loggingInByOAuth2"
                 :label="tt('Username')"
                 :placeholder="tt('Your username or email')"
-                v-model:value="username"
+                v-model:value.trim="username"
                 @input="tempToken = ''"
             ></f7-list-input>
             <f7-list-input
                 type="password"
                 autocomplete="current-password"
                 clear-button
+                :disabled="loggingInByPassword || loggingInByOAuth2"
                 :label="tt('Password')"
                 :placeholder="tt('Your password')"
                 v-model:value="password"
@@ -35,43 +41,53 @@
             <f7-list-item>
                 <template #title>
                     <small>
-                        <f7-link external :href="getDesktopVersionPath()">{{ tt('Switch to Desktop Version') }}</f7-link>
+                        <f7-link :class="{ 'disabled': loggingInByPassword || loggingInByOAuth2 }" @click="switchToDesktopVersion">{{ tt('Switch to Desktop Version') }}</f7-link>
                     </small>
                 </template>
                 <template #after>
                     <small>
-                        <f7-link :class="{'disabled': !isUserForgetPasswordEnabled()}" @click="forgetPasswordEmail = ''; showForgetPasswordSheet = true">{{ tt('Forget Password?') }}</f7-link>
+                        <f7-link :class="{ 'disabled': !isUserForgetPasswordEnabled() || loggingInByPassword || loggingInByOAuth2 }" @click="forgetPasswordEmail = ''; showForgetPasswordSheet = true">{{ tt('Forget Password?') }}</f7-link>
                     </small>
                 </template>
             </f7-list-item>
         </f7-list>
 
         <f7-list class="margin-vertical-half">
-            <f7-list-button :class="{ 'disabled': inputIsEmpty || logining }" :text="tt('Log In')" @click="login"></f7-list-button>
-            <f7-block-footer>
+            <f7-list-button :class="{ 'disabled': inputIsEmpty || loggingInByPassword || loggingInByOAuth2 }" :text="tt('Log In')"
+                            @click="login" v-if="isInternalAuthEnabled()"></f7-list-button>
+            <f7-list-item class="login-divider display-flex align-items-center" v-if="isInternalAuthEnabled() && isOAuth2Enabled()">
+                <hr class="margin-inline-end-half" />
+                <small>{{ tt('or') }}</small>
+                <hr class="margin-inline-start-half" />
+            </f7-list-item>
+            <f7-list-button external :class="{ 'disabled': loggingInByPassword || loggingInByOAuth2 }" :href="oauth2LoginUrl" :text="oauth2LoginDisplayName"
+                            @click="loginByOAuth2" v-if="isOAuth2Enabled()"></f7-list-button>
+            <f7-block-footer v-if="isInternalAuthEnabled()">
                 <span>{{ tt('Don\'t have an account?') }}</span>&nbsp;
-                <f7-link :class="{'disabled': !isUserRegistrationEnabled()}" href="/signup" :text="tt('Create an account')"></f7-link>
+                <f7-link :class="{ 'disabled': !isUserRegistrationEnabled() || loggingInByPassword || loggingInByOAuth2 }" href="/signup" :text="tt('Create an account')"></f7-link>
             </f7-block-footer>
             <f7-block-footer class="padding-bottom">
             </f7-block-footer>
         </f7-list>
 
-        <language-select-button />
-
         <f7-list class="login-page-bottom">
             <f7-block-footer>
-                <div class="login-page-powered-by">
+                <language-select-button :disabled="loggingInByPassword || loggingInByOAuth2" />
+
+                <div class="login-page-powered-by margin-top-half">
                     <span>Powered by</span>
-                    <f7-link external href="https://github.com/mayswind/ezbookkeeping" target="_blank">ezBookkeeping</f7-link>
+                    <f7-link @click="openExternalUrl('https://github.com/mayswind/ezbookkeeping')" target="_blank">ezBookkeeping</f7-link>
                     <span>{{ version }}</span>
                 </div>
             </f7-block-footer>
         </f7-list>
 
         <f7-toolbar class="login-page-fixed-bottom" tabbar bottom :outline="false">
-            <div class="login-page-powered-by">
+            <language-select-button :disabled="loggingInByPassword || loggingInByOAuth2" />
+
+            <div class="login-page-powered-by margin-top-half">
                 <span>Powered by</span>
-                <f7-link external href="https://github.com/mayswind/ezbookkeeping" target="_blank">ezBookkeeping</f7-link>
+                <f7-link @click="openExternalUrl('https://github.com/mayswind/ezbookkeeping')" target="_blank">ezBookkeeping</f7-link>
                 <span>{{ version }}</span>
             </div>
         </f7-toolbar>
@@ -81,31 +97,27 @@
             :opened="show2faSheet" @sheet:closed="show2faSheet = false"
         >
             <f7-page-content>
-                <div class="display-flex padding justify-content-space-between align-items-center">
+                <div class="display-flex padding-horizontal padding-top justify-content-space-between align-items-center">
                     <div class="ebk-sheet-title"><b>{{ tt('Two-Factor Authentication') }}</b></div>
                 </div>
                 <div class="padding-horizontal padding-bottom">
-                    <f7-list strong class="no-margin">
+                    <f7-list class="no-margin">
                         <f7-list-input
                             type="number"
                             autocomplete="one-time-code"
                             outline
-                            floating-label
                             clear-button
                             class="no-margin no-padding-bottom"
                             v-if="twoFAVerifyType === 'passcode'"
-                            :label="tt('Passcode')"
                             :placeholder="tt('Passcode')"
                             v-model:value="passcode"
                             @keyup.enter="verify"
                         ></f7-list-input>
                         <f7-list-input
                             outline
-                            floating-label
                             clear-button
                             class="no-margin no-padding-bottom"
                             v-if="twoFAVerifyType === 'backupcode'"
-                            :label="tt('Backup Code')"
                             :placeholder="tt('Backup Code')"
                             v-model:value="backupCode"
                             @keyup.enter="verify"
@@ -123,7 +135,7 @@
             style="height:auto"
             :opened="showForgetPasswordSheet" @sheet:closed="showForgetPasswordSheet = false"
         >
-            <div class="swipe-handler" style="z-index: 10"></div>
+            <div class="swipe-handler"></div>
             <f7-page-content>
                 <div class="display-flex padding justify-content-space-between align-items-center">
                     <div class="ebk-sheet-title"><b>{{ tt('Forget Password?') }}</b></div>
@@ -132,15 +144,13 @@
                     <p class="no-margin">
                         <span>{{ tt('Please enter your email address used for registration and we\'ll send you an email with a reset password link') }}</span>
                     </p>
-                    <f7-list strong class="no-margin">
+                    <f7-list class="no-margin">
                         <f7-list-input
                             type="email"
                             autocomplete="email"
                             outline
-                            floating-label
                             clear-button
                             class="no-margin no-padding-bottom"
-                            :label="tt('E-mail')"
                             :placeholder="tt('Your email address')"
                             v-model:value="forgetPasswordEmail"
                             @keyup.enter="requestResetPassword"
@@ -176,7 +186,15 @@ import { useRootStore } from '@/stores/index.ts';
 
 import { APPLICATION_LOGO_PATH } from '@/consts/asset.ts';
 import { KnownErrorCode } from '@/consts/api.ts';
-import { isUserRegistrationEnabled, isUserForgetPasswordEnabled, isUserVerifyEmailEnabled } from '@/lib/server_settings.ts';
+
+import { generateRandomUUID } from '@/lib/misc.ts';
+import {
+    isUserRegistrationEnabled,
+    isUserForgetPasswordEnabled,
+    isUserVerifyEmailEnabled,
+    isInternalAuthEnabled,
+    isOAuth2Enabled
+} from '@/lib/server_settings.ts';
 import { getDesktopVersionPath } from '@/lib/version.ts';
 import { useI18nUIComponents, showLoading, hideLoading, isModalShowing } from '@/lib/ui/mobile.ts';
 
@@ -185,7 +203,7 @@ const props = defineProps<{
 }>();
 
 const { tt } = useI18n();
-const { showAlert, showToast } = useI18nUIComponents();
+const { showAlert, showConfirm, showToast, openExternalUrl } = useI18nUIComponents();
 
 const rootStore = useRootStore();
 
@@ -197,13 +215,17 @@ const {
     backupCode,
     tempToken,
     twoFAVerifyType,
-    logining,
+    oauth2ClientSessionId,
+    loggingInByPassword,
+    loggingInByOAuth2,
     verifying,
     inputIsEmpty,
     twoFAInputIsEmpty,
+    oauth2LoginUrl,
+    oauth2LoginDisplayName,
     tips,
     doAfterLogin
-} = useLoginPageBase();
+} = useLoginPageBase('mobile');
 
 const forgetPasswordEmail = ref<string>('');
 const resendVerifyEmail = ref<string>('');
@@ -223,6 +245,12 @@ const twoFAVerifyTypeSwitchName = computed<string>(() => {
     }
 });
 
+function switchToDesktopVersion(): void {
+    showConfirm('Are you sure you want to switch to desktop version?', () => {
+        window.location.replace(getDesktopVersionPath());
+    });
+}
+
 function login(): void {
     const router = props.f7router;
 
@@ -241,17 +269,17 @@ function login(): void {
         return;
     }
 
-    logining.value = true;
+    loggingInByPassword.value = true;
     resendVerifyEmail.value = '';
     hasValidEmailVerifyToken.value = false;
     currentPasswordForResendVerifyEmail.value = '';
-    showLoading(() => logining.value);
+    showLoading(() => loggingInByPassword.value);
 
     rootStore.authorize({
         loginName: username.value,
         password: password.value
     }).then(authResponse => {
-        logining.value = false;
+        loggingInByPassword.value = false;
         hideLoading();
 
         if (authResponse.need2FA) {
@@ -263,7 +291,7 @@ function login(): void {
         doAfterLogin(authResponse);
         router.refreshPage();
     }).catch(error => {
-        logining.value = false;
+        loggingInByPassword.value = false;
         hideLoading();
 
         if (isUserVerifyEmailEnabled() && error.error && error.error.errorCode === KnownErrorCode.UserEmailNotVerified && error.error.context && error.error.context.email) {
@@ -286,6 +314,11 @@ function loginByPressEnter(): void {
     }
 
     return login();
+}
+
+function loginByOAuth2(): void {
+    loggingInByOAuth2.value = true;
+    showLoading();
 }
 
 function verify(): void {
@@ -389,4 +422,34 @@ function switch2FAVerifyType(): void {
         twoFAVerifyType.value = 'passcode';
     }
 }
+
+oauth2ClientSessionId.value = generateRandomUUID();
 </script>
+
+<style>
+.login-divider > .item-content {
+    width: 100%;
+    min-height: 0;
+    white-space: nowrap;
+
+    > .item-inner {
+        padding-top: 0;
+        padding-bottom: 0;
+        min-height: 0;
+
+        > small {
+            opacity: 0.7;
+        }
+
+        > hr {display: block;
+            flex: 1 1 100%;
+            height: 0;
+            max-height: 0;
+            border-style: solid;
+            border-width: thin 0 0 0;
+            opacity: 0.12;
+            transition: inherit;
+        }
+    }
+}
+</style>

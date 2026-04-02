@@ -101,6 +101,14 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 
 	log.BootInfof(c, "[database.updateAllDatabaseTablesStructure] transaction category table maintained successfully")
 
+	err = datastore.Container.UserDataStore.SyncStructs(new(models.TransactionTagGroup))
+
+	if err != nil {
+		return err
+	}
+
+	log.BootInfof(c, "[database.updateAllDatabaseTablesStructure] transaction tag group table maintained successfully")
+
 	err = datastore.Container.UserDataStore.SyncStructs(new(models.TransactionTag))
 
 	if err != nil {
@@ -148,6 +156,22 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 	}
 
 	log.BootInfof(c, "[database.updateAllDatabaseTablesStructure] user application cloud settings table maintained successfully")
+
+	err = datastore.Container.UserDataStore.SyncStructs(new(models.UserExternalAuth))
+
+	if err != nil {
+		return err
+	}
+
+	log.BootInfof(c, "[database.updateAllDatabaseTablesStructure] user external auth table maintained successfully")
+
+	err = datastore.Container.UserDataStore.SyncStructs(new(models.InsightsExplorer))
+
+	if err != nil {
+		return err
+	}
+
+	log.BootInfof(c, "[database.updateAllDatabaseTablesStructure] insights explorer table maintained successfully")
 
 	return nil
 }

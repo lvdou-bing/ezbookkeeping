@@ -1,13 +1,12 @@
+import { keys, keysIfValueEquals, values } from '@/core/base.ts';
 import { AccountType, AccountCategory } from '@/core/account.ts';
 import { PARENT_ACCOUNT_CURRENCY_PLACEHOLDER } from '@/consts/currency.ts';
-import { type AccountBalance, type CategorizedAccount, type AccountCategoriesWithVisibleCount, Account } from '@/models/account.ts';
+import { type AccountBalance, type CategorizedAccount, Account } from '@/models/account.ts';
 
 export function getCategorizedAccountsMap(allAccounts: Account[]): Record<number, CategorizedAccount> {
     const ret: Record<number, CategorizedAccount> = {};
 
-    for (let i = 0; i < allAccounts.length; i++) {
-        const account = allAccounts[i];
-
+    for (const account of allAccounts) {
         if (!ret[account.category]) {
             const categoryInfo = AccountCategory.valueOf(account.category);
 
@@ -21,8 +20,10 @@ export function getCategorizedAccountsMap(allAccounts: Account[]): Record<number
             }
         }
 
-        if (ret[account.category]) {
-            const accountList = ret[account.category].accounts;
+        const categorizedAccount = ret[account.category];
+
+        if (categorizedAccount) {
+            const accountList = categorizedAccount.accounts;
             accountList.push(account);
         }
     }
@@ -30,20 +31,21 @@ export function getCategorizedAccountsMap(allAccounts: Account[]): Record<number
     return ret;
 }
 
-export function getCategorizedAccounts(allAccounts: Account[]): CategorizedAccount[] {
+export function getCategorizedAccounts(allAccounts: Account[], customAccountCategoryOrder: string): CategorizedAccount[] {
     const ret: CategorizedAccount[] = [];
-    const allCategories = AccountCategory.values();
+    const allCategories = AccountCategory.values(customAccountCategoryOrder);
     const categorizedAccounts = getCategorizedAccountsMap(allAccounts);
 
-    for (let i = 0; i < allCategories.length; i++) {
-        const category = allCategories[i];
-
+    for (const category of allCategories) {
         if (!categorizedAccounts[category.type]) {
             continue;
         }
 
         const accountCategory = categorizedAccounts[category.type];
-        ret.push(accountCategory);
+
+        if (accountCategory) {
+            ret.push(accountCategory);
+        }
     }
 
     return ret;
@@ -56,14 +58,11 @@ export function getAccountMapByName(allAccounts: Account[]): Record<string, Acco
         return ret;
     }
 
-    for (let i = 0; i < allAccounts.length; i++) {
-        const account = allAccounts[i];
-
+    for (const account of allAccounts) {
         if (account.type === AccountType.SingleAccount.type) {
             ret[account.name] = account;
         } else if (account.type === AccountType.MultiSubAccounts.type && account.subAccounts) {
-            for (let j = 0; j < account.subAccounts.length; j++) {
-                const subAccount = account.subAccounts[j];
+            for (const subAccount of account.subAccounts) {
                 ret[subAccount.name] = subAccount;
             }
         }
@@ -72,70 +71,62 @@ export function getAccountMapByName(allAccounts: Account[]): Record<string, Acco
     return ret;
 }
 
-export function getCategorizedAccountsWithVisibleCount(categorizedAccountsMap: Record<number, CategorizedAccount>): AccountCategoriesWithVisibleCount[] {
-    const ret: AccountCategoriesWithVisibleCount[] = [];
-    const allCategories = AccountCategory.values();
+export function filterCategorizedAccounts(categorizedAccountsMap: Record<number, CategorizedAccount>, customAccountCategoryOrder: string, allowAccountName?: string, showHidden?: boolean): CategorizedAccount[] {
+    const ret: CategorizedAccount[] = [];
+    const allCategories = AccountCategory.values(customAccountCategoryOrder);
+    const lowercaseFilterContent = allowAccountName ? allowAccountName.toLowerCase() : '';
 
-    for (let i = 0; i < allCategories.length; i++) {
-        const accountCategory = allCategories[i];
+    for (const accountCategory of allCategories) {
+        const categorizedAccount = categorizedAccountsMap[accountCategory.type];
 
-        if (!categorizedAccountsMap[accountCategory.type] || !categorizedAccountsMap[accountCategory.type].accounts) {
+        if (!categorizedAccount || !categorizedAccount.accounts || categorizedAccount.accounts.length < 1) {
             continue;
         }
 
-        const allAccounts = categorizedAccountsMap[accountCategory.type].accounts;
-        const allSubAccounts: Record<string, Account[]> = {};
-        const allVisibleSubAccountCounts: Record<string, number> = {};
-        const allFirstVisibleSubAccountIndexes: Record<string, number> = {};
-        let allVisibleAccountCount = 0;
-        let firstVisibleAccountIndex = -1;
+        const allFilteredAccounts: Account[] = [];
 
-        for (let j = 0; j < allAccounts.length; j++) {
-            const account = allAccounts[j];
-
-            if (!account.hidden) {
-                allVisibleAccountCount++;
-
-                if (firstVisibleAccountIndex === -1) {
-                    firstVisibleAccountIndex = j;
-                }
+        for (const account of categorizedAccount.accounts) {
+            if (!showHidden && account.hidden) {
+                continue;
             }
 
-            if (account.type === AccountType.MultiSubAccounts.type && account.subAccounts) {
-                let visibleSubAccountCount = 0;
-                let firstVisibleSubAccountIndex = -1;
+            const accountMatchesName = !lowercaseFilterContent || account.name.toLowerCase().includes(lowercaseFilterContent);
+            const filteredSubAccounts: Account[] = [];
 
-                for (let k = 0; k < account.subAccounts.length; k++) {
-                    const subAccount = account.subAccounts[k];
-
-                    if (!subAccount.hidden) {
-                        visibleSubAccountCount++;
-
-                        if (firstVisibleSubAccountIndex === -1) {
-                            firstVisibleSubAccountIndex = k;
-                        }
+            if (account.subAccounts) {
+                for (const subAccount of account.subAccounts) {
+                    if (!showHidden && subAccount.hidden) {
+                        continue;
                     }
-                }
 
-                if (account.subAccounts.length > 0) {
-                    allSubAccounts[account.id] = account.subAccounts;
-                    allVisibleSubAccountCounts[account.id] = visibleSubAccountCount;
-                    allFirstVisibleSubAccountIndexes[account.id] = firstVisibleSubAccountIndex;
+                    if (!accountMatchesName && lowercaseFilterContent && !subAccount.name.toLowerCase().includes(lowercaseFilterContent)) {
+                        continue;
+                    }
+
+                    const filteredSubAccount = subAccount.clone();
+                    filteredSubAccounts.push(filteredSubAccount);
                 }
             }
+
+            if (!accountMatchesName && filteredSubAccounts.length < 1) {
+                continue;
+            }
+
+            const filteredAccount = account.cloneSelf();
+
+            if (filteredAccount.type === AccountType.MultiSubAccounts.type) {
+                filteredAccount.subAccounts = filteredSubAccounts;
+            }
+
+            allFilteredAccounts.push(filteredAccount);
         }
 
-        if (allAccounts.length > 0) {
+        if (allFilteredAccounts.length > 0) {
             ret.push({
-                category: accountCategory.type,
-                name: accountCategory.name,
-                icon: accountCategory.defaultAccountIconId,
-                allAccounts: allAccounts,
-                allVisibleAccountCount: allVisibleAccountCount,
-                firstVisibleAccountIndex: firstVisibleAccountIndex,
-                allSubAccounts: allSubAccounts,
-                allVisibleSubAccountCounts: allVisibleSubAccountCounts,
-                allFirstVisibleSubAccountIndexes: allFirstVisibleSubAccountIndexes
+                category: categorizedAccount.category,
+                name: categorizedAccount.name,
+                icon: categorizedAccount.icon,
+                accounts: allFilteredAccounts
             });
         }
     }
@@ -143,20 +134,18 @@ export function getCategorizedAccountsWithVisibleCount(categorizedAccountsMap: R
     return ret;
 }
 
-export function getAllFilteredAccountsBalance(categorizedAccounts: Record<number, CategorizedAccount>, accountFilter: (account: Account) => boolean): AccountBalance[] {
-    const allAccountCategories = AccountCategory.values();
+export function getAllFilteredAccountsBalance(categorizedAccounts: Record<number, CategorizedAccount>, customAccountCategoryOrder: string, accountFilter: (account: Account) => boolean): AccountBalance[] {
+    const allAccountCategories = AccountCategory.values(customAccountCategoryOrder);
     const ret: AccountBalance[] = [];
 
-    for (let categoryIdx = 0; categoryIdx < allAccountCategories.length; categoryIdx++) {
-        const accountCategory = allAccountCategories[categoryIdx];
+    for (const accountCategory of allAccountCategories) {
+        const categorizedAccount = categorizedAccounts[accountCategory.type];
 
-        if (!categorizedAccounts[accountCategory.type] || !categorizedAccounts[accountCategory.type].accounts) {
+        if (!categorizedAccount || !categorizedAccount.accounts) {
             continue;
         }
 
-        for (let accountIdx = 0; accountIdx < categorizedAccounts[accountCategory.type].accounts.length; accountIdx++) {
-            const account = categorizedAccounts[accountCategory.type].accounts[accountIdx];
-
+        for (const account of categorizedAccount.accounts) {
             if (account.hidden || !accountFilter(account)) {
                 continue;
             }
@@ -169,9 +158,7 @@ export function getAllFilteredAccountsBalance(categorizedAccounts: Record<number
                     currency: account.currency
                 });
             } else if (account.type === AccountType.MultiSubAccounts.type && account.subAccounts) {
-                for (let subAccountIdx = 0; subAccountIdx < account.subAccounts.length; subAccountIdx++) {
-                    const subAccount = account.subAccounts[subAccountIdx];
-
+                for (const subAccount of account.subAccounts) {
                     if (subAccount.hidden || !accountFilter(subAccount)) {
                         continue;
                     }
@@ -197,13 +184,7 @@ export function getFinalAccountIdsByFilteredAccountIds(allAccountsMap: Record<st
         return finalAccountIds;
     }
 
-    for (const accountId in allAccountsMap) {
-        if (!Object.prototype.hasOwnProperty.call(allAccountsMap, accountId)) {
-            continue;
-        }
-
-        const account = allAccountsMap[accountId];
-
+    for (const account of values(allAccountsMap)) {
         if (filteredAccountIds && !isAccountOrSubAccountsAllChecked(account, filteredAccountIds)) {
             continue;
         }
@@ -225,12 +206,12 @@ export function getUnifiedSelectedAccountsCurrencyOrDefaultCurrency(allAccountsM
 
     let accountCurrency = '';
 
-    for (const accountId in selectedAccountIds) {
-        if (!Object.prototype.hasOwnProperty.call(selectedAccountIds, accountId)) {
+    for (const accountId of keysIfValueEquals(selectedAccountIds, true)) {
+        const account = allAccountsMap[accountId];
+
+        if (!account) {
             continue;
         }
-
-        const account = allAccountsMap[accountId];
 
         if (account.currency === PARENT_ACCOUNT_CURRENCY_PLACEHOLDER) {
             continue;
@@ -258,24 +239,15 @@ export function selectAccountOrSubAccounts(filterAccountIds: Record<string, bool
             return;
         }
 
-        for (let i = 0; i < account.subAccounts.length; i++) {
-            const subAccount = account.subAccounts[i];
+        for (const subAccount of account.subAccounts) {
             filterAccountIds[subAccount.id] = value;
         }
     }
 }
 
-export function selectAll(filterAccountIds: Record<string, boolean>, allAccountsMap: Record<string, Account>, skipHiddenAccount: boolean): void {
-    for (const accountId in filterAccountIds) {
-        if (!Object.prototype.hasOwnProperty.call(filterAccountIds, accountId)) {
-            continue;
-        }
-
+export function selectAll(filterAccountIds: Record<string, boolean>, allAccountsMap: Record<string, Account>): void {
+    for (const accountId of keys(filterAccountIds)) {
         const account = allAccountsMap[accountId];
-
-        if (skipHiddenAccount && account && account.hidden) {
-            continue;
-        }
 
         if (account && account.type === AccountType.SingleAccount.type) {
             filterAccountIds[account.id] = false;
@@ -283,17 +255,9 @@ export function selectAll(filterAccountIds: Record<string, boolean>, allAccounts
     }
 }
 
-export function selectNone(filterAccountIds: Record<string, boolean>, allAccountsMap: Record<string, Account>, skipHiddenAccount: boolean): void {
-    for (const accountId in filterAccountIds) {
-        if (!Object.prototype.hasOwnProperty.call(filterAccountIds, accountId)) {
-            continue;
-        }
-
+export function selectNone(filterAccountIds: Record<string, boolean>, allAccountsMap: Record<string, Account>): void {
+    for (const accountId of keys(filterAccountIds)) {
         const account = allAccountsMap[accountId];
-
-        if (skipHiddenAccount && account && account.hidden) {
-            continue;
-        }
 
         if (account && account.type === AccountType.SingleAccount.type) {
             filterAccountIds[account.id] = true;
@@ -301,17 +265,9 @@ export function selectNone(filterAccountIds: Record<string, boolean>, allAccount
     }
 }
 
-export function selectInvert(filterAccountIds: Record<string, boolean>, allAccountsMap: Record<string, Account>, skipHiddenAccount: boolean): void {
-    for (const accountId in filterAccountIds) {
-        if (!Object.prototype.hasOwnProperty.call(filterAccountIds, accountId)) {
-            continue;
-        }
-
+export function selectInvert(filterAccountIds: Record<string, boolean>, allAccountsMap: Record<string, Account>): void {
+    for (const accountId of keys(filterAccountIds)) {
         const account = allAccountsMap[accountId];
-
-        if (skipHiddenAccount && account && account.hidden) {
-            continue;
-        }
 
         if (account && account.type === AccountType.SingleAccount.type) {
             filterAccountIds[account.id] = !filterAccountIds[account.id];
@@ -324,8 +280,7 @@ export function isAccountOrSubAccountsAllChecked(account: Account, filterAccount
         return !filterAccountIds[account.id];
     }
 
-    for (let i = 0; i < account.subAccounts.length; i++) {
-        const subAccount = account.subAccounts[i];
+    for (const subAccount of account.subAccounts) {
         if (filterAccountIds[subAccount.id]) {
             return false;
         }
@@ -341,8 +296,7 @@ export function isAccountOrSubAccountsHasButNotAllChecked(account: Account, filt
 
     let checkedCount = 0;
 
-    for (let i = 0; i < account.subAccounts.length; i++) {
-        const subAccount = account.subAccounts[i];
+    for (const subAccount of account.subAccounts) {
         if (!filterAccountIds[subAccount.id]) {
             checkedCount++;
         }

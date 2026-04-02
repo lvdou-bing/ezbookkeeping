@@ -25,7 +25,7 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/uuid"
 )
 
-const verifyEmailUrlFormat = "%sdesktop/#/verify_email?token=%s"
+const verifyEmailUrlFormat = "%sdesktop#/verify_email?token=%s"
 
 // UserService represents user service
 type UserService struct {
@@ -184,7 +184,7 @@ func (s *UserService) GetUserAvatar(c core.Context, uid int64, fileExtension str
 }
 
 // CreateUser saves a new user model to database
-func (s *UserService) CreateUser(c core.Context, user *models.User) error {
+func (s *UserService) CreateUser(c core.Context, user *models.User, noPassword bool) error {
 	exists, err := s.ExistsUsername(c, user.Username)
 
 	if err != nil {
@@ -201,7 +201,7 @@ func (s *UserService) CreateUser(c core.Context, user *models.User) error {
 		return errs.ErrUserEmailAlreadyExists
 	}
 
-	if user.Password == "" {
+	if !noPassword && user.Password == "" {
 		return errs.ErrPasswordIsEmpty
 	}
 
@@ -215,7 +215,11 @@ func (s *UserService) CreateUser(c core.Context, user *models.User) error {
 		return errs.ErrSystemIsBusy
 	}
 
-	user.Password = utils.EncodePassword(user.Password, user.Salt)
+	if !noPassword {
+		user.Password = utils.EncodePassword(user.Password, user.Salt)
+	} else {
+		user.Password = ""
+	}
 
 	user.Deleted = false
 
@@ -373,6 +377,32 @@ func (s *UserService) UpdateUser(c core.Context, user *models.User, modifyUserLa
 	}
 
 	return keyProfileUpdated, emailSetToUnverified, nil
+}
+
+// UpdateUserPassword updates the password of specified user
+func (s *UserService) UpdateUserPassword(c core.Context, user *models.User) error {
+	if user.Uid <= 0 {
+		return errs.ErrUserIdInvalid
+	}
+
+	if user.Password == "" {
+		return errs.ErrPasswordIsEmpty
+	}
+
+	user.Password = utils.EncodePassword(user.Password, user.Salt)
+	user.UpdatedUnixTime = time.Now().Unix()
+
+	return s.UserDB().DoTransaction(c, func(sess *xorm.Session) error {
+		updatedRows, err := sess.ID(user.Uid).Cols("password", "updated_unix_time").Where("deleted=?", false).Update(user)
+
+		if err != nil {
+			return err
+		} else if updatedRows < 1 {
+			return errs.ErrUserNotFound
+		}
+
+		return nil
+	})
 }
 
 // UpdateUserAvatar updates the custom avatar type of specified user
@@ -680,14 +710,14 @@ func (s *UserService) SendVerifyEmail(user *models.User, verifyEmailToken string
 	}
 
 	templateParams := map[string]any{
-		"AppName": s.CurrentConfig().AppName,
+		"AppName": localeTextItems.GlobalTextItems.AppName,
 		"VerifyEmail": map[string]any{
 			"Title":               verifyEmailTextItems.Title,
 			"Salutation":          fmt.Sprintf(verifyEmailTextItems.SalutationFormat, user.Nickname),
 			"DescriptionAboveBtn": verifyEmailTextItems.DescriptionAboveBtn,
 			"VerifyEmailUrl":      verifyEmailUrl,
 			"VerifyEmail":         verifyEmailTextItems.VerifyEmail,
-			"DescriptionBelowBtn": fmt.Sprintf(verifyEmailTextItems.DescriptionBelowBtnFormat, s.CurrentConfig().AppName, expireTimeInMinutes),
+			"DescriptionBelowBtn": fmt.Sprintf(verifyEmailTextItems.DescriptionBelowBtnFormat, localeTextItems.GlobalTextItems.AppName, expireTimeInMinutes),
 		},
 	}
 

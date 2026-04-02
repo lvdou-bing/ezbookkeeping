@@ -1,6 +1,6 @@
 <template>
     <f7-page @page:afterin="onPageAfterIn">
-        <f7-navbar :title="tt('Two-Factor Authentication')" :back-link="tt('Back')"></f7-navbar>
+        <f7-navbar :class="{ 'disabled': loading }" :title="tt('Two-Factor Authentication')" :back-link="tt('Back')"></f7-navbar>
 
         <f7-list strong inset dividers class="margin-top skeleton-text" v-if="loading">
             <f7-list-item title="Status" after="Unknown"></f7-list-item>
@@ -63,6 +63,7 @@ import type { Router } from 'framework7/types';
 import { useI18n } from '@/locales/helpers.ts';
 import { useI18nUIComponents, showLoading, hideLoading } from '@/lib/ui/mobile.ts';
 
+import { KnownErrorCode } from '@/consts/api.ts';
 import { useTwoFactorAuthStore } from '@/stores/twoFactorAuth.ts';
 
 const props = defineProps<{
@@ -100,6 +101,10 @@ function init(): void {
         loading.value = false;
     }).catch(error => {
         if (error.processed) {
+            status.value = null;
+            loading.value = false;
+        } else if (error.error && error.error.errorCode === KnownErrorCode.ApiNotFound) {
+            status.value = null;
             loading.value = false;
         } else {
             loadingError.value = error;

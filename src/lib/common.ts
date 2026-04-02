@@ -1,5 +1,11 @@
-import { keys, keysIfValueEquals, values } from '@/core/base.ts';
-import type { NameValue, TypeAndName, TypeAndDisplayName} from '@/core/base.ts';
+import {
+    type GenericNameValue,
+    type TypeAndName,
+    type TypeAndDisplayName,
+    keys,
+    keysIfValueEquals,
+    values
+} from '@/core/base.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 export function isFunction(val: unknown): val is Function {
@@ -52,7 +58,7 @@ export function isYearMonth(val: unknown): val is string {
     return !!parseInt(items[0] as string) && !!parseInt(items[1] as string);
 }
 
-export function isEquals(obj1: unknown, obj2: unknown): boolean {
+export function isEquals<T>(obj1: T, obj2: T): boolean {
     if (obj1 === obj2) {
         return true;
     }
@@ -106,11 +112,7 @@ export function isEquals(obj1: unknown, obj2: unknown): boolean {
     }
 }
 
-export function isYearMonthEquals(val1: unknown, val2: unknown): boolean {
-    if (typeof(val1) !== 'string' || typeof(val2) !== 'string') {
-        return false;
-    }
-
+export function isYearMonthEquals(val1: string, val2: string): boolean {
     const items1 = val1.split('-');
     const items2 = val2.split('-');
 
@@ -289,7 +291,7 @@ export function getItemByKeyValue<T>(src: Record<string, T>[] | Record<string, R
     return null;
 }
 
-export function findNameByValue(items: NameValue[], value: string): string | null {
+export function findNameByValue<T>(items: GenericNameValue<T>[], value: T): string | null {
     for (const item of items) {
         if (item.value === value) {
             return item.name;
@@ -431,8 +433,8 @@ export function countSplitItems(str: string | undefined | null, separator: strin
     const items = str.split(separator);
     let count = 0;
 
-    for (let i = 0; i < items.length; i++) {
-        if (items[i]) {
+    for (const item of items) {
+        if (item) {
             count++;
         }
     }
@@ -483,9 +485,13 @@ export function selectInvert(filterItemIds: Record<string, boolean>, allItemsMap
 }
 
 export function isPrimaryItemHasSecondaryValue(primaryItem: Record<string, Record<string, unknown>[]>, primarySubItemsField: string, secondaryValueField: string | undefined, secondaryHiddenField: string | undefined, secondaryValue: unknown): boolean {
-    for (let i = 0; i < primaryItem[primarySubItemsField].length; i++) {
-        const secondaryItem = primaryItem[primarySubItemsField][i];
+    const secondaryItems = primaryItem[primarySubItemsField];
 
+    if (!secondaryItems || secondaryItems.length < 1) {
+        return false;
+    }
+
+    for (const secondaryItem of secondaryItems) {
         if (secondaryHiddenField && secondaryItem[secondaryHiddenField]) {
             continue;
         }
@@ -500,14 +506,12 @@ export function isPrimaryItemHasSecondaryValue(primaryItem: Record<string, Recor
     return false;
 }
 
-export function getPrimaryValueBySecondaryValue<T>(items: Record<string, Record<string, T>[]>[] | Record<string, Record<string, Record<string, T>[]>>, primarySubItemsField: string | undefined, primaryValueField: string | undefined, primaryHiddenField: string | undefined, secondaryValueField: string | undefined, secondaryHiddenField: string | undefined, secondaryValue: T): Record<string, T>[] | Record<string, Record<string, T>[]> | null {
+export function getPrimaryValueBySecondaryValue<T>(items: Record<string, Record<string, T>[]>[] | Record<string, Record<string, Record<string, T>[]>>, primarySubItemsField: string | undefined, primaryValueField: string | undefined, primaryHiddenField: string | undefined, secondaryValueField: string | undefined, secondaryHiddenField: string | undefined, secondaryValue: T): Record<string, T>[] | Record<string, Record<string, T>[]> | null | undefined {
     if (primarySubItemsField) {
         if (isArray(items)) {
             const arr = items as Record<string, Record<string, T>[]>[];
 
-            for (let i = 0; i < arr.length; i++) {
-                const primaryItem = arr[i];
-
+            for (const primaryItem of arr) {
                 if (primaryHiddenField && primaryItem[primaryHiddenField]) {
                     continue;
                 }
@@ -523,13 +527,7 @@ export function getPrimaryValueBySecondaryValue<T>(items: Record<string, Record<
         } else {
             const obj = items as Record<string, Record<string, Record<string, T>[]>>;
 
-            for (const field in obj) {
-                if (!Object.prototype.hasOwnProperty.call(obj, field)) {
-                    continue;
-                }
-
-                const primaryItem = obj[field];
-
+            for (const primaryItem of values(obj)) {
                 if (primaryHiddenField && primaryItem[primaryHiddenField]) {
                     continue;
                 }

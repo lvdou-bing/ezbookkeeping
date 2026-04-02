@@ -9,11 +9,14 @@ export const SUPPORTED_DOCUMENT_LANGUAGES_FOR_IMPORT_FILE: Record<string, string
     'zh-Hant': 'zh-Hans',
 };
 
+export const UTF_8 = 'utf-8';
+
 export const SUPPORTED_FILE_ENCODINGS: string[] = [
-    'utf-8', // UTF-8
-    'utf-8-bom', // UTF-8 with BOM
+    UTF_8, // UTF-8
     'utf-16le', // UTF-16 Little Endian
     'utf-16be', // UTF-16 Big Endian
+    'utf-32le', // UTF-32 Little Endian
+    'utf-32be', // UTF-32 Big Endian
     'cp437', // OEM United States (CP-437)
     'cp863', // OEM Canadian French (CP-863)
     'cp037', // IBM EBCDIC US/Canada (CP-037)
@@ -62,6 +65,37 @@ export const SUPPORTED_FILE_ENCODINGS: string[] = [
     'shift_jis', // Japanese (Shift_JIS)
 ];
 
+export const CHARDET_ENCODING_NAME_MAPPING: Record<string, string> = {
+    'UTF-8': UTF_8,
+    'UTF-16LE': 'utf-16le',
+    'UTF-16BE': 'utf-16be',
+    'UTF-32LE': 'utf-32le',
+    'UTF-32BE': 'utf-32be',
+    'ISO-2022-JP': 'iso-2022-jp',
+    // 'ISO-2022-KR': '', // not supported
+    // 'ISO-2022-CN': '', // not supported
+    'Shift_JIS': 'shift_jis',
+    'Big5': 'big5',
+    'EUC-JP': 'euc-jp',
+    'EUC-KR': 'euc-kr',
+    'GB18030': 'gb18030',
+    'ISO-8859-1': 'iso-8859-1',
+    'ISO-8859-2': 'iso-8859-2',
+    'ISO-8859-5': 'iso-8859-5',
+    'ISO-8859-6': 'iso-8859-6',
+    'ISO-8859-7': 'iso-8859-7',
+    'ISO-8859-8': 'iso-8859-8',
+    'ISO-8859-9': 'iso-8859-9',
+    'windows-1250': 'windows-1250',
+    'windows-1251': 'windows-1251',
+    'windows-1252': 'windows-1252',
+    'windows-1253': 'windows-1253',
+    'windows-1254': 'windows-1254',
+    'windows-1255': 'windows-1255',
+    'windows-1256': 'windows-1256',
+    'KOI8-R':'koi8r'
+};
+
 export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndTypes[] = [
     {
         categoryName: 'ezBookkeeping File Format',
@@ -106,6 +140,11 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
                         type: 'custom_tsv',
                         name: 'TSV (Tab-separated values) File',
                         extensions: '.tsv,.txt',
+                    },
+                    {
+                        type: 'custom_ssv',
+                        name: 'SSV (Semicolon-separated values) File',
+                        extensions: '.txt',
                     }
                 ],
                 supportedEncodings: SUPPORTED_FILE_ENCODINGS,
@@ -128,6 +167,11 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
                         type: 'custom_tsv',
                         name: 'TSV (Tab-separated values) File',
                         extensions: '.tsv,.txt',
+                    },
+                    {
+                        type: 'custom_ssv',
+                        name: 'SSV (Semicolon-separated values) File',
+                        extensions: '.txt',
                     }
                 ],
                 dataFromTextbox: true,
@@ -135,7 +179,28 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
                     supportMultiLanguages: true,
                     anchor: 'how-to-import-delimiter-separated-values-dsv-file-or-data'
                 }
-            }
+            },
+            {
+                type: 'excel',
+                name: 'Excel Workbook File',
+                extensions: '.xlsx,.xls',
+                subTypes: [
+                    {
+                        type: 'custom_xlsx',
+                        name: 'Excel Workbook File (.xlsx)',
+                        extensions: '.xlsx',
+                    },
+                    {
+                        type: 'custom_xls',
+                        name: 'Excel 97-2003 Workbook File (.xls)',
+                        extensions: '.xls',
+                    }
+                ],
+                document: {
+                    supportMultiLanguages: true,
+                    anchor: 'how-to-import-delimiter-separated-values-dsv-file-or-data'
+                }
+            },
         ]
     },
     {
@@ -168,7 +233,11 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
                         type: 'qif_dmy',
                         name: 'Day-month-year format',
                     }
-                ]
+                ],
+                supportedAdditionalOptions: {
+                    payeeAsTag: false,
+                    payeeAsDescription: true
+                }
             },
             {
                 type: 'iif',
@@ -180,6 +249,11 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
     {
         categoryName: 'General Bank Statement Format',
         fileTypes: [
+            {
+                type: 'camt052',
+                name: 'Camt.052 Bank to Customer Statement File',
+                extensions: '.xml'
+            },
             {
                 type: 'camt053',
                 name: 'Camt.053 Bank to Customer Statement File',
@@ -197,7 +271,7 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
         fileTypes: [
             {
                 type: 'alipay_app_csv',
-                name: 'Alipay (App) Transaction Flow File',
+                name: 'Alipay (App) Statement File',
                 extensions: '.csv',
                 document: {
                     supportMultiLanguages: 'zh-Hans',
@@ -206,7 +280,7 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
             },
             {
                 type: 'alipay_web_csv',
-                name: 'Alipay (Web) Transaction Flow File',
+                name: 'Alipay (Web) Statement File',
                 extensions: '.csv',
                 document: {
                     supportMultiLanguages: 'zh-Hans',
@@ -215,7 +289,7 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
             },
             {
                 type: 'wechat_pay_app',
-                name: 'WeChat Pay Billing File',
+                name: 'WeChat Pay Statement File',
                 extensions: '.xlsx,.csv',
                 subTypes: [
                     {
@@ -232,6 +306,15 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
                 document: {
                     supportMultiLanguages: 'zh-Hans',
                     anchor: '如何获取微信支付账单文件'
+                }
+            },
+            {
+                type: 'jdcom_finance_app_csv',
+                name: 'JD.com Finance Statement File',
+                extensions: '.csv',
+                document: {
+                    supportMultiLanguages: 'zh-Hans',
+                    anchor: '如何获取京东金融账单文件'
                 }
             }
         ]
@@ -266,6 +349,11 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
                 type: 'feidee_mymoney_csv',
                 name: 'Feidee MyMoney (App) Data Export File',
                 extensions: '.csv',
+                supportedAdditionalOptions: {
+                    memberAsTag: false,
+                    projectAsTag: false,
+                    merchantAsTag: false,
+                },
                 document: {
                     supportMultiLanguages: 'zh-Hans',
                     anchor: '如何获取随手记app数据导出文件'
@@ -275,6 +363,11 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
                 type: 'feidee_mymoney_xls',
                 name: 'Feidee MyMoney (Web) Data Export File',
                 extensions: '.xls',
+                supportedAdditionalOptions: {
+                    memberAsTag: false,
+                    projectAsTag: false,
+                    merchantAsTag: false,
+                },
                 document: {
                     supportMultiLanguages: 'zh-Hans',
                     anchor: '如何获取随手记web版数据导出文件'
@@ -284,6 +377,11 @@ export const SUPPORTED_IMPORT_FILE_CATEGORY_AND_TYPES: ImportFileCategoryAndType
                 type: 'feidee_mymoney_elecloud_xlsx',
                 name: 'Feidee MyMoney (Elecloud) Data Export File',
                 extensions: '.xlsx',
+                supportedAdditionalOptions: {
+                    memberAsTag: false,
+                    projectAsTag: false,
+                    merchantAsTag: false,
+                },
                 document: {
                     supportMultiLanguages: 'zh-Hans',
                     anchor: '如何获取随手记神象云账本数据导出文件'

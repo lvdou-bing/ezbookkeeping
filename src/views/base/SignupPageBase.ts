@@ -10,6 +10,8 @@ import { useExchangeRatesStore } from '@/stores/exchangeRates.ts';
 import { CategoryType } from '@/core/category.ts';
 import type { RegisterResponse } from '@/models/auth_response.ts';
 import type { User } from '@/models/user.ts';
+
+import { updateMapCacheExpiration } from '@/lib/cache.ts';
 import { setExpenseAndIncomeAmountColor } from '@/lib/ui/common.ts';
 
 export function useSignupPageBase() {
@@ -93,7 +95,7 @@ export function useSignupPageBase() {
     const inputIsEmpty = computed<boolean>(() => !!inputEmptyProblemMessage.value);
     const inputIsInvalid = computed<boolean>(() => !!inputInvalidProblemMessage.value);
 
-    function getCategoryTypeName(categoryType: CategoryType): string {
+    function getCategoryTypeName(categoryType: number): string {
         switch (categoryType) {
             case CategoryType.Income:
                 return tt('Income Categories');
@@ -114,9 +116,9 @@ export function useSignupPageBase() {
             setExpenseAndIncomeAmountColor(response.user.expenseAmountColor, response.user.incomeAmountColor);
         }
 
-        if (settingsStore.appSettings.autoUpdateExchangeRatesData) {
-            exchangeRatesStore.getLatestExchangeRates({ silent: true, force: false });
-        }
+        updateMapCacheExpiration(settingsStore.appSettings.mapCacheExpiration);
+        exchangeRatesStore.removeExpiredExchangeRates(true);
+        exchangeRatesStore.autoUpdateExchangeRatesData();
 
         if (response.notificationContent) {
             rootStore.setNotificationContent(response.notificationContent);

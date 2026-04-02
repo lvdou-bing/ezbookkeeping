@@ -2,18 +2,16 @@ package storage
 
 import (
 	"bytes"
-	"crypto/tls"
 	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/errs"
+	"github.com/mayswind/ezbookkeeping/pkg/httpclient"
 	"github.com/mayswind/ezbookkeeping/pkg/log"
 	"github.com/mayswind/ezbookkeeping/pkg/settings"
-	"github.com/mayswind/ezbookkeeping/pkg/utils"
 )
 
 // WebDAVObjectStorage represents WebDAV object storage
@@ -26,22 +24,9 @@ type WebDAVObjectStorage struct {
 // NewWebDAVObjectStorage returns a WebDAV object storage
 func NewWebDAVObjectStorage(config *settings.Config, pathPrefix string) (*WebDAVObjectStorage, error) {
 	webDavConfig := config.WebDAVConfig
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	utils.SetProxyUrl(transport, webDavConfig.Proxy)
-
-	if webDavConfig.SkipTLSVerify {
-		transport.TLSClientConfig = &tls.Config{
-			InsecureSkipVerify: true,
-		}
-	}
-
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   time.Duration(webDavConfig.RequestTimeout) * time.Millisecond,
-	}
 
 	storage := &WebDAVObjectStorage{
-		httpClient:   client,
+		httpClient:   httpclient.NewHttpClient(webDavConfig.RequestTimeout, webDavConfig.Proxy, webDavConfig.SkipTLSVerify, core.GetOutgoingUserAgent(), false),
 		webDavConfig: webDavConfig,
 		rootPath:     webDavConfig.RootPath,
 	}

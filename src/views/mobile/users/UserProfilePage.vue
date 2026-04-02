@@ -1,11 +1,11 @@
 <template>
     <f7-page @page:afterin="onPageAfterIn">
         <f7-navbar>
-            <f7-nav-left :back-link="tt('Back')"></f7-nav-left>
+            <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')"></f7-nav-left>
             <f7-nav-title :title="tt('User Profile')"></f7-nav-title>
-            <f7-nav-right class="navbar-compact-icons">
+            <f7-nav-right :class="{ 'navbar-compact-icons': true, 'disabled': loading }">
                 <f7-link icon-f7="ellipsis" :class="{ 'disabled': !isUserVerifyEmailEnabled() || loading || emailVerified }" @click="showMoreActionSheet = true"></f7-link>
-                <f7-link :class="{ 'disabled': inputIsNotChanged || inputIsInvalid || saving }" :text="tt('Save')" @click="save"></f7-link>
+                <f7-link icon-f7="checkmark_alt" :class="{ 'disabled': inputIsNotChanged || inputIsInvalid || saving }" @click="save(currentNoPassword)"></f7-link>
             </f7-nav-right>
         </f7-navbar>
 
@@ -211,10 +211,11 @@
                 link="#" no-chevron
                 class="list-item-with-header-and-title list-item-no-item-after"
                 :header="tt('Fiscal Year Start Date')"
-                :title="formatFiscalYearStartToGregorianLikeLongMonth(newProfile.fiscalYearStart)"
+                :title="formatFiscalYearStartToGregorianLikeLongMonth(newProfile.fiscalYearStart, NumeralSystem.valueOf(newProfile.numeralSystem) ?? NumeralSystem.Default)"
                 @click="showFiscalYearStartSheet = true"
             >
                 <fiscal-year-start-selection-sheet
+                    :numeral-system="newProfile.numeralSystem"
                     v-model:show="showFiscalYearStartSheet"
                     v-model="newProfile.fiscalYearStart">
                 </fiscal-year-start-selection-sheet>
@@ -550,7 +551,7 @@
                               :cancel-disabled="saving"
                               v-model:show="showInputPasswordSheet"
                               v-model="currentPassword"
-                              @password:confirm="save()">
+                              @password:confirm="save(true)">
         </password-input-sheet>
     </f7-page>
 </template>
@@ -569,6 +570,7 @@ import { useUserStore } from '@/stores/user.ts';
 import { useAccountsStore } from '@/stores/account.ts';
 
 import { TextDirection } from '@/core/text.ts';
+import { NumeralSystem } from '@/core/numeral.ts';
 import type { LocalizedCurrencyInfo } from '@/core/currency.ts';
 
 import type { UserProfileResponse } from '@/models/user.ts';
@@ -637,6 +639,7 @@ const userStore = useUserStore();
 const accountsStore = useAccountsStore();
 
 const currentPassword = ref<string>('');
+const currentNoPassword = ref<boolean>(false);
 const loadingError = ref<unknown | null>(null);
 const showInputPasswordSheet = ref<boolean>(false);
 const showAccountSheet = ref<boolean>(false);
@@ -688,6 +691,7 @@ function init(): void {
     Promise.all(promises).then(responses => {
         const profile = responses[1] as UserProfileResponse;
         setCurrentUserProfile(profile);
+        currentNoPassword.value = !!profile.noPassword;
         loading.value = false;
     }).catch(error => {
         if (error.processed) {
@@ -699,7 +703,7 @@ function init(): void {
     });
 }
 
-function save(): void {
+function save(confirm?: boolean): void {
     const router = props.f7router;
 
     showInputPasswordSheet.value = false;
@@ -711,7 +715,7 @@ function save(): void {
         return;
     }
 
-    if (newProfile.value.password && !currentPassword.value) {
+    if (newProfile.value.password && !confirm) {
         showInputPasswordSheet.value = true;
         return;
     }

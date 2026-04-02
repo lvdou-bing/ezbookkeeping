@@ -219,7 +219,7 @@ func (s *AccountService) GetMaxSubAccountDisplayOrder(c core.Context, uid int64,
 }
 
 // CreateAccounts saves a new account model to database
-func (s *AccountService) CreateAccounts(c core.Context, mainAccount *models.Account, mainAccountBalanceTime int64, childrenAccounts []*models.Account, childrenAccountBalanceTimes []int64, utcOffset int16) error {
+func (s *AccountService) CreateAccounts(c core.Context, mainAccount *models.Account, mainAccountBalanceTime int64, childrenAccounts []*models.Account, childrenAccountBalanceTimes []int64, clientTimezone *time.Location) error {
 	if mainAccount.Uid <= 0 {
 		return errs.ErrUserIdInvalid
 	}
@@ -266,11 +266,14 @@ func (s *AccountService) CreateAccounts(c core.Context, mainAccount *models.Acco
 			}
 
 			transactionTime := defaultTransactionTime
+			transactionUtcOffset := utils.GetTimezoneOffsetMinutes(now, clientTimezone)
 
 			if i == 0 && mainAccountBalanceTime > 0 {
 				transactionTime = utils.GetMinTransactionTimeFromUnixTime(mainAccountBalanceTime)
+				transactionUtcOffset = utils.GetTimezoneOffsetMinutes(mainAccountBalanceTime, clientTimezone)
 			} else if i > 0 && len(childrenAccountBalanceTimes) > i-1 && childrenAccountBalanceTimes[i-1] > 0 {
 				transactionTime = utils.GetMinTransactionTimeFromUnixTime(childrenAccountBalanceTimes[i-1])
+				transactionUtcOffset = utils.GetTimezoneOffsetMinutes(childrenAccountBalanceTimes[i-1], clientTimezone)
 			} else {
 				defaultTransactionTime++
 			}
@@ -281,7 +284,7 @@ func (s *AccountService) CreateAccounts(c core.Context, mainAccount *models.Acco
 				Deleted:              false,
 				Type:                 models.TRANSACTION_DB_TYPE_MODIFY_BALANCE,
 				TransactionTime:      transactionTime,
-				TimezoneUtcOffset:    utcOffset,
+				TimezoneUtcOffset:    transactionUtcOffset,
 				AccountId:            allAccounts[i].AccountId,
 				Amount:               allAccounts[i].Balance,
 				RelatedAccountId:     allAccounts[i].AccountId,
@@ -366,7 +369,7 @@ func (s *AccountService) CreateAccounts(c core.Context, mainAccount *models.Acco
 }
 
 // ModifyAccounts saves an existed account model to database
-func (s *AccountService) ModifyAccounts(c core.Context, mainAccount *models.Account, updateAccounts []*models.Account, addSubAccounts []*models.Account, addSubAccountBalanceTimes []int64, removeSubAccountIds []int64, utcOffset int16) error {
+func (s *AccountService) ModifyAccounts(c core.Context, mainAccount *models.Account, updateAccounts []*models.Account, addSubAccounts []*models.Account, addSubAccountBalanceTimes []int64, removeSubAccountIds []int64, clientTimezone *time.Location) error {
 	if mainAccount.Uid <= 0 {
 		return errs.ErrUserIdInvalid
 	}
@@ -407,9 +410,11 @@ func (s *AccountService) ModifyAccounts(c core.Context, mainAccount *models.Acco
 				}
 
 				transactionTime := defaultTransactionTime
+				transactionUtcOffset := utils.GetTimezoneOffsetMinutes(now, clientTimezone)
 
 				if len(addSubAccountBalanceTimes) > i && addSubAccountBalanceTimes[i] > 0 {
 					transactionTime = utils.GetMinTransactionTimeFromUnixTime(addSubAccountBalanceTimes[i])
+					transactionUtcOffset = utils.GetTimezoneOffsetMinutes(addSubAccountBalanceTimes[i], clientTimezone)
 				} else {
 					defaultTransactionTime++
 				}
@@ -420,7 +425,7 @@ func (s *AccountService) ModifyAccounts(c core.Context, mainAccount *models.Acco
 					Deleted:              false,
 					Type:                 models.TRANSACTION_DB_TYPE_MODIFY_BALANCE,
 					TransactionTime:      transactionTime,
-					TimezoneUtcOffset:    utcOffset,
+					TimezoneUtcOffset:    transactionUtcOffset,
 					AccountId:            childAccount.AccountId,
 					Amount:               childAccount.Balance,
 					RelatedAccountId:     childAccount.AccountId,
@@ -440,7 +445,7 @@ func (s *AccountService) ModifyAccounts(c core.Context, mainAccount *models.Acco
 		// update accounts
 		for i := 0; i < len(updateAccounts); i++ {
 			account := updateAccounts[i]
-			updatedRows, err := sess.ID(account.AccountId).Cols("name", "category", "icon", "color", "comment", "extend", "hidden", "updated_unix_time").Where("uid=? AND deleted=?", account.Uid, false).Update(account)
+			updatedRows, err := sess.ID(account.AccountId).Cols("name", "display_order", "category", "icon", "color", "comment", "extend", "hidden", "updated_unix_time").Where("uid=? AND deleted=?", account.Uid, false).Update(account)
 
 			if err != nil {
 				return err
@@ -939,4 +944,45 @@ func (s *AccountService) GetAccountOrSubAccountIds(c core.Context, accountIds st
 	}
 
 	return allAccountIds, nil
+}
+
+// GetAccountOrSubAccountIdsByAccountName returns a list of account ids or sub-account ids according to given account name
+func (s *AccountService) GetAccountOrSubAccountIdsByAccountName(accounts []*models.Account, accountName string) []int64 {
+	accountIds := make([]int64, 0)
+	parentAccountIds := make([]int64, 0)
+	childAccountByParentAccountId := make(map[int64][]*models.Account)
+
+	for i := 0; i < len(accounts); i++ {
+		account := accounts[i]
+
+		if account.Name == accountName {
+			if account.Type == models.ACCOUNT_TYPE_SINGLE_ACCOUNT {
+				accountIds = append(accountIds, account.AccountId)
+			} else if account.Type == models.ACCOUNT_TYPE_MULTI_SUB_ACCOUNTS {
+				parentAccountIds = append(parentAccountIds, account.AccountId)
+			}
+		} else if account.ParentAccountId > 0 {
+			childAccounts, exists := childAccountByParentAccountId[account.ParentAccountId]
+
+			if !exists {
+				childAccounts = make([]*models.Account, 0)
+			}
+
+			childAccounts = append(childAccounts, account)
+			childAccountByParentAccountId[account.ParentAccountId] = childAccounts
+		}
+	}
+
+	for i := 0; i < len(parentAccountIds); i++ {
+		parentAccountId := parentAccountIds[i]
+
+		if childAccounts, exists := childAccountByParentAccountId[parentAccountId]; exists {
+			for j := 0; j < len(childAccounts); j++ {
+				childAccount := childAccounts[j]
+				accountIds = append(accountIds, childAccount.AccountId)
+			}
+		}
+	}
+
+	return accountIds
 }

@@ -76,23 +76,27 @@ type UserFeatureRestrictionType uint64
 
 // User Feature Restriction Type
 const (
-	USER_FEATURE_RESTRICTION_TYPE_UPDATE_PASSWORD           UserFeatureRestrictionType = 1
-	USER_FEATURE_RESTRICTION_TYPE_UPDATE_EMAIL              UserFeatureRestrictionType = 2
-	USER_FEATURE_RESTRICTION_TYPE_UPDATE_PROFILE_BASIC_INFO UserFeatureRestrictionType = 3
-	USER_FEATURE_RESTRICTION_TYPE_UPDATE_AVATAR             UserFeatureRestrictionType = 4
-	USER_FEATURE_RESTRICTION_TYPE_REVOKE_OTHER_SESSION      UserFeatureRestrictionType = 5
-	USER_FEATURE_RESTRICTION_TYPE_ENABLE_2FA                UserFeatureRestrictionType = 6
-	USER_FEATURE_RESTRICTION_TYPE_DISABLE_2FA               UserFeatureRestrictionType = 7
-	USER_FEATURE_RESTRICTION_TYPE_FORGET_PASSWORD           UserFeatureRestrictionType = 8
-	USER_FEATURE_RESTRICTION_TYPE_IMPORT_TRANSACTION        UserFeatureRestrictionType = 9
-	USER_FEATURE_RESTRICTION_TYPE_EXPORT_TRANSACTION        UserFeatureRestrictionType = 10
-	USER_FEATURE_RESTRICTION_TYPE_CLEAR_ALL_DATA            UserFeatureRestrictionType = 11
-	USER_FEATURE_RESTRICTION_TYPE_SYNC_APPLICATION_SETTINGS UserFeatureRestrictionType = 12
-	USER_FEATURE_RESTRICTION_TYPE_MCP_ACCESS                UserFeatureRestrictionType = 13
+	USER_FEATURE_RESTRICTION_TYPE_UPDATE_PASSWORD                              UserFeatureRestrictionType = 1
+	USER_FEATURE_RESTRICTION_TYPE_UPDATE_EMAIL                                 UserFeatureRestrictionType = 2
+	USER_FEATURE_RESTRICTION_TYPE_UPDATE_PROFILE_BASIC_INFO                    UserFeatureRestrictionType = 3
+	USER_FEATURE_RESTRICTION_TYPE_UPDATE_AVATAR                                UserFeatureRestrictionType = 4
+	USER_FEATURE_RESTRICTION_TYPE_REVOKE_OTHER_SESSION                         UserFeatureRestrictionType = 5
+	USER_FEATURE_RESTRICTION_TYPE_ENABLE_2FA                                   UserFeatureRestrictionType = 6
+	USER_FEATURE_RESTRICTION_TYPE_DISABLE_2FA                                  UserFeatureRestrictionType = 7
+	USER_FEATURE_RESTRICTION_TYPE_FORGET_PASSWORD                              UserFeatureRestrictionType = 8
+	USER_FEATURE_RESTRICTION_TYPE_IMPORT_TRANSACTION                           UserFeatureRestrictionType = 9
+	USER_FEATURE_RESTRICTION_TYPE_EXPORT_TRANSACTION                           UserFeatureRestrictionType = 10
+	USER_FEATURE_RESTRICTION_TYPE_CLEAR_ALL_DATA                               UserFeatureRestrictionType = 11
+	USER_FEATURE_RESTRICTION_TYPE_SYNC_APPLICATION_SETTINGS                    UserFeatureRestrictionType = 12
+	USER_FEATURE_RESTRICTION_TYPE_MCP_ACCESS                                   UserFeatureRestrictionType = 13
+	USER_FEATURE_RESTRICTION_TYPE_CREATE_TRANSACTION_FROM_AI_IMAGE_RECOGNITION UserFeatureRestrictionType = 14
+	USER_FEATURE_RESTRICTION_TYPE_OAUTH2_LOGIN                                 UserFeatureRestrictionType = 15
+	USER_FEATURE_RESTRICTION_TYPE_UNLINK_THIRD_PARTY_LOGIN                     UserFeatureRestrictionType = 16
+	USER_FEATURE_RESTRICTION_TYPE_GENERATE_API_TOKEN                           UserFeatureRestrictionType = 17
 )
 
 const userFeatureRestrictionTypeMinValue UserFeatureRestrictionType = USER_FEATURE_RESTRICTION_TYPE_UPDATE_PASSWORD
-const userFeatureRestrictionTypeMaxValue UserFeatureRestrictionType = USER_FEATURE_RESTRICTION_TYPE_MCP_ACCESS
+const userFeatureRestrictionTypeMaxValue UserFeatureRestrictionType = USER_FEATURE_RESTRICTION_TYPE_GENERATE_API_TOKEN
 
 // String returns a textual representation of the restriction type of user features
 func (t UserFeatureRestrictionType) String() string {
@@ -123,6 +127,14 @@ func (t UserFeatureRestrictionType) String() string {
 		return "Sync Application Settings"
 	case USER_FEATURE_RESTRICTION_TYPE_MCP_ACCESS:
 		return "MCP (Model Context Protocol) Access"
+	case USER_FEATURE_RESTRICTION_TYPE_CREATE_TRANSACTION_FROM_AI_IMAGE_RECOGNITION:
+		return "Create Transaction from AI Image Recognition"
+	case USER_FEATURE_RESTRICTION_TYPE_OAUTH2_LOGIN:
+		return "OAuth 2.0 Login"
+	case USER_FEATURE_RESTRICTION_TYPE_UNLINK_THIRD_PARTY_LOGIN:
+		return "Unlink Third-Party Login"
+	case USER_FEATURE_RESTRICTION_TYPE_GENERATE_API_TOKEN:
+		return "Generate API Token"
 	default:
 		return fmt.Sprintf("Invalid(%d)", int(t))
 	}

@@ -6,6 +6,7 @@
         :label="label"
         :menu-props="{ contentClass: 'date-time-select-menu' }"
         v-model="dateTime"
+        @paste="onPaste"
     >
         <template #selection>
             <span class="text-truncate cursor-pointer">{{ displayTime }}</span>
@@ -86,14 +87,18 @@ import { type TimePickerValue, useDateTimeSelectionBase } from '@/components/bas
 
 import { ThemeType } from '@/core/theme.ts';
 import { NumeralSystem } from '@/core/numeral.ts';
-import { MeridiemIndicator } from '@/core/datetime.ts';
+import {
+    type DateTime,
+    type DateFormatOrder,
+    MeridiemIndicator,
+    KnownDateTimeFormat
+} from '@/core/datetime.ts';
 import {
     getHourIn12HourFormat,
-    getTimezoneOffsetMinutes,
-    getBrowserTimezoneOffsetMinutes,
     getLocalDatetimeFromUnixTime,
-    getActualUnixTimeForStore,
-    getUnixTimeFromLocalDatetime,
+    getSameDateTimeWithBrowserTimezone,
+    parseDateTimeFromUnixTimeWithTimezoneOffset,
+    parseDateTimeFromKnownDateTimeFormat,
     getAMOrPM,
     getCombinedDateAndTimeValues
 } from '@/lib/datetime.ts';
@@ -101,6 +106,7 @@ import { setChildInputFocus } from '@/lib/ui/desktop.ts';
 
 const props = defineProps<{
     modelValue: number;
+    timezoneUtcOffset: number;
     disabled?: boolean;
     readonly?: boolean;
     label?: string;
@@ -115,7 +121,11 @@ const theme = useTheme();
 const {
     tt,
     getCurrentNumeralSystemType,
-    formatUnixTimeToLongDateTime
+    getLongDateFormatOrder,
+    getShortDateFormatOrder,
+    parseDateTimeFromLongDateTime,
+    parseDateTimeFromShortDateTime,
+    formatDateTimeToLongDateTime
 } = useI18n();
 
 const {
@@ -124,6 +134,8 @@ const {
     isMinuteTwoDigits,
     isSecondTwoDigits,
     isMeridiemIndicatorFirst,
+    getLocalDatetimeFromSameDateTimeOfUnixTime,
+    getUnixTimeFromSameDateTimeOfLocalDatetime,
     getDisplayTimeValue,
     generateAllHours,
     generateAllMinutesOrSeconds
@@ -135,13 +147,15 @@ const secondInput = useTemplateRef<VAutocomplete>('secondInput');
 
 const isDarkMode = computed<boolean>(() => theme.global.name.value === ThemeType.Dark);
 const numeralSystem = computed<NumeralSystem>(() => getCurrentNumeralSystemType());
+const longDateFormatOrder = computed<DateFormatOrder>(() => getLongDateFormatOrder());
+const shortDateFormatOrder = computed<DateFormatOrder>(() => getShortDateFormatOrder());
 
 const dateTime = computed<Date>({
     get: () => {
-        return getLocalDatetimeFromUnixTime(props.modelValue);
+        return getLocalDatetimeFromSameDateTimeOfUnixTime(props.modelValue, props.timezoneUtcOffset);
     },
     set: (value: Date) => {
-        const unixTime = getUnixTimeFromLocalDatetime(value);
+        const unixTime = getUnixTimeFromSameDateTimeOfLocalDatetime(value, props.timezoneUtcOffset);
 
         if (unixTime < 0) {
             emit('error', 'Date is too early');
@@ -152,7 +166,7 @@ const dateTime = computed<Date>({
     }
 });
 
-const displayTime = computed<string>(() => formatUnixTimeToLongDateTime(getActualUnixTimeForStore(getUnixTimeFromLocalDatetime(dateTime.value), getTimezoneOffsetMinutes(), getBrowserTimezoneOffsetMinutes())));
+const displayTime = computed<string>(() => formatDateTimeToLongDateTime(parseDateTimeFromUnixTimeWithTimezoneOffset(props.modelValue, props.timezoneUtcOffset)));
 
 const hourItems = computed<TimePickerValue[]>(() => generateAllHours(1, isHourTwoDigits.value));
 const minuteItems = computed<TimePickerValue[]>(() => generateAllMinutesOrSeconds(1, isMinuteTwoDigits.value));
@@ -219,6 +233,50 @@ function toggleMeridiemIndicator(): void {
     } else {
         currentMeridiemIndicator.value = MeridiemIndicator.AM.name;
     }
+}
+
+function onPaste(event: ClipboardEvent): void {
+    if (!event.clipboardData || props.readonly || props.disabled) {
+        event.preventDefault();
+        return;
+    }
+
+    let text = event.clipboardData.getData('Text');
+
+    if (!text) {
+        event.preventDefault();
+        return;
+    }
+
+    text = text.trim();
+
+    const formats = KnownDateTimeFormat.detect(text, longDateFormatOrder.value, shortDateFormatOrder.value);
+    let dt: DateTime | undefined = undefined;
+
+    if (formats && (formats.length === 1 || (formats.length > 1 && formats[0]!.type === longDateFormatOrder.value && formats[0]!.type === shortDateFormatOrder.value))) {
+        dt = parseDateTimeFromKnownDateTimeFormat(text, formats[0] as KnownDateTimeFormat);
+
+        if (dt) {
+            dateTime.value = getLocalDatetimeFromUnixTime(getSameDateTimeWithBrowserTimezone(dt).getUnixTime());
+            return;
+        }
+    }
+
+    dt = parseDateTimeFromLongDateTime(text);
+
+    if (dt) {
+        dateTime.value = getLocalDatetimeFromUnixTime(getSameDateTimeWithBrowserTimezone(dt).getUnixTime());
+        return;
+    }
+
+    dt = parseDateTimeFromShortDateTime(text);
+
+    if (dt) {
+        dateTime.value = getLocalDatetimeFromUnixTime(getSameDateTimeWithBrowserTimezone(dt).getUnixTime());
+        return;
+    }
+
+    event.preventDefault();
 }
 
 function onFocused(input: VAutocomplete | null | undefined, focused: boolean): void {

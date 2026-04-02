@@ -19,12 +19,12 @@ type MCPQueryTransactionsRequest struct {
 	StartTime             string `json:"start_time" jsonschema:"format=date-time" jsonschema_description:"Start time for the query in RFC 3339 format (e.g. 2023-01-01T12:00:00Z)"`
 	EndTime               string `json:"end_time" jsonschema:"format=date-time" jsonschema_description:"End time for the query in RFC 3339 format or (e.g. 2023-01-01T12:00:00Z)"`
 	Type                  string `json:"type,omitempty" jsonschema:"enum=income,enum=expense,enum=transfer" jsonschema_description:"Transaction type to filter by (income, expense, transfer) (optional)"`
-	SecondaryCategoryName string `json:"category_name,omitempty" jsonschema_description:"Secondary category name to filter transactions by (optional)"`
+	SecondaryCategoryName string `json:"category_name,omitempty" jsonschema_description:"Primary or secondary category name to filter transactions by (optional)"`
 	AccountName           string `json:"account_name,omitempty" jsonschema_description:"Account name to filter transactions by (optional)"`
 	Keyword               string `json:"keyword,omitempty" jsonschema_description:"Keyword to search in transaction description (optional)"`
 	Count                 int32  `json:"count,omitempty" jsonschema:"default=100" jsonschema_description:"Maximum number of results to return (default: 100)"`
 	Page                  int32  `json:"page,omitempty" jsonschema:"default=1" jsonschema_description:"Page number for pagination (default: 1)"`
-	ResponseFields        string `json:"response_fields,omitempty" jsonschema_description:"Comma-separated list of fields to include in the response (optional, leave empty for all fields, available fields: time, currency, category_name, account_name, comment)"`
+	ResponseFields        string `json:"response_fields,omitempty" jsonschema_description:"Comma-separated list of optional fields to include in the response (optional, leave empty for all fields, available fields: time, currency, category_name, account_name, comment)"`
 }
 
 // MCPQueryTransactionsResponse represents the response structure for querying transactions
@@ -126,13 +126,12 @@ func (h *mcpQueryTransactionsToolHandler) Handle(c *core.WebContext, callToolReq
 		return nil, nil, err
 	}
 
-	accountsMap := services.GetAccountService().GetVisibleAccountNameMapByList(allAccounts)
 	filterAccountIds := make([]int64, 0)
 
 	if queryTransactionsRequest.AccountName != "" {
-		if account, exists := accountsMap[queryTransactionsRequest.AccountName]; exists {
-			filterAccountIds = append(filterAccountIds, account.AccountId)
-		} else {
+		filterAccountIds = services.GetAccountService().GetAccountOrSubAccountIdsByAccountName(allAccounts, queryTransactionsRequest.AccountName)
+
+		if len(filterAccountIds) < 1 {
 			return nil, nil, errs.ErrAccountNotFound
 		}
 	}
@@ -144,25 +143,24 @@ func (h *mcpQueryTransactionsToolHandler) Handle(c *core.WebContext, callToolReq
 		return nil, nil, err
 	}
 
-	categoriesMap := services.GetTransactionCategoryService().GetVisibleCategoryNameMapByList(allCategories)
 	filterCategoryIds := make([]int64, 0)
 
 	if queryTransactionsRequest.SecondaryCategoryName != "" {
-		if category, exists := categoriesMap[queryTransactionsRequest.SecondaryCategoryName]; exists {
-			filterCategoryIds = append(filterCategoryIds, category.CategoryId)
-		} else {
+		filterCategoryIds = services.GetTransactionCategoryService().GetCategoryOrSubCategoryIdsByCategoryName(allCategories, queryTransactionsRequest.SecondaryCategoryName)
+
+		if len(filterCategoryIds) < 1 {
 			return nil, nil, errs.ErrTransactionCategoryNotFound
 		}
 	}
 
-	totalCount, err := services.GetTransactionService().GetTransactionCount(c, uid, maxTransactionTime, minTransactionTime, transactionType, filterCategoryIds, filterAccountIds, nil, false, models.TRANSACTION_TAG_FILTER_HAS_ANY, "", queryTransactionsRequest.Keyword)
+	totalCount, err := services.GetTransactionService().GetTransactionCount(c, uid, maxTransactionTime, minTransactionTime, transactionType, filterCategoryIds, filterAccountIds, nil, false, "", queryTransactionsRequest.Keyword)
 
 	if err != nil {
 		log.Errorf(c, "[transactions.TransactionListHandler] failed to get transaction count for user \"uid:%d\", because %s", uid, err.Error())
 		return nil, nil, err
 	}
 
-	transactions, err := services.GetTransactionService().GetTransactionsByMaxTime(c, uid, maxTransactionTime, minTransactionTime, transactionType, filterCategoryIds, filterAccountIds, nil, false, models.TRANSACTION_TAG_FILTER_HAS_ANY, "", queryTransactionsRequest.Keyword, queryTransactionsRequest.Page, queryTransactionsRequest.Count, false, true)
+	transactions, err := services.GetTransactionService().GetTransactionsByMaxTime(c, uid, maxTransactionTime, minTransactionTime, transactionType, filterCategoryIds, filterAccountIds, nil, false, "", queryTransactionsRequest.Keyword, queryTransactionsRequest.Page, queryTransactionsRequest.Count, false, true)
 	structuredResponse, response, err := h.createNewMCPQueryTransactionsResponse(c, &queryTransactionsRequest, transactions, totalCount, services.GetAccountService().GetAccountMapByList(allAccounts), services.GetTransactionCategoryService().GetCategoryMapByList(allCategories))
 
 	if err != nil {

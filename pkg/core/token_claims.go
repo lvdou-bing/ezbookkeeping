@@ -6,16 +6,28 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// TokenUserAgentCreatedViaCli is the user agent of token created via cli
+const TokenUserAgentCreatedViaCli = ApplicationName + " Cli"
+
+// TokenUserAgentForAPI is the user agent for API token
+const TokenUserAgentForAPI = ApplicationName + " API"
+
+// TokenUserAgentForMCP is the user agent for MCP token
+const TokenUserAgentForMCP = ApplicationName + " MCP"
+
 // TokenType represents token type
 type TokenType byte
 
 // Token types
 const (
-	USER_TOKEN_TYPE_NORMAL         TokenType = 1
-	USER_TOKEN_TYPE_REQUIRE_2FA    TokenType = 2
-	USER_TOKEN_TYPE_EMAIL_VERIFY   TokenType = 3
-	USER_TOKEN_TYPE_PASSWORD_RESET TokenType = 4
-	USER_TOKEN_TYPE_MCP            TokenType = 5
+	USER_TOKEN_TYPE_NORMAL                         TokenType = 1
+	USER_TOKEN_TYPE_REQUIRE_2FA                    TokenType = 2
+	USER_TOKEN_TYPE_EMAIL_VERIFY                   TokenType = 3
+	USER_TOKEN_TYPE_PASSWORD_RESET                 TokenType = 4
+	USER_TOKEN_TYPE_MCP                            TokenType = 5
+	USER_TOKEN_TYPE_OAUTH2_CALLBACK_REQUIRE_VERIFY TokenType = 6
+	USER_TOKEN_TYPE_OAUTH2_CALLBACK                TokenType = 7
+	USER_TOKEN_TYPE_API                            TokenType = 8
 )
 
 // UserTokenClaims represents user token

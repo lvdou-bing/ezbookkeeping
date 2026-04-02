@@ -13,7 +13,7 @@ import { useExchangeRatesStore } from '@/stores/exchangeRates.ts';
 import type { NumeralSystem } from '@/core/numeral.ts';
 import type { WeekDayValue } from '@/core/datetime.ts';
 import type { LocalizedTimezoneInfo } from '@/core/timezone.ts';
-import { TransactionType } from '@/core/transaction.ts';
+import { TransactionType, TransactionQuickAddButtonActionType } from '@/core/transaction.ts';
 import { TemplateType } from '@/core/template.ts';
 import { DISPLAY_HIDDEN_AMOUNT } from '@/consts/numeral.ts';
 import { TRANSACTION_MAX_PICTURE_COUNT } from '@/consts/transaction.ts';
@@ -26,7 +26,8 @@ import { Transaction } from '@/models/transaction.ts';
 import { TransactionTemplate } from '@/models/transaction_template.ts';
 
 import {
-    isArray
+    isArray,
+    isDefined
 } from '@/lib/common.ts';
 
 import {
@@ -36,8 +37,15 @@ import {
 import {
     getUtcOffsetByUtcOffsetMinutes,
     getTimezoneOffsetMinutes,
+    getSameDateTimeWithCurrentTimezone,
+    parseDateTimeFromUnixTimeWithBrowserTimezone,
     getCurrentUnixTime
 } from '@/lib/datetime.ts';
+
+import {
+    type SetTransactionOptions,
+    setTransactionModelByTransaction
+} from '@/lib/transaction.ts';
 
 export enum TransactionEditPageType {
     Transaction = 'transaction',
@@ -54,6 +62,12 @@ export enum GeoLocationStatus {
     Getting = 'getting',
     Success = 'success',
     Error = 'error'
+}
+
+export enum AfterSaveAction {
+    GoBack = 'goBack',
+    StayWithNewTransaction = 'stayWithNewTransaction',
+    StayWithCurrentTransaction = 'stayWithCurrentTransaction'
 }
 
 export function useTransactionEditPageBase(type: TransactionEditPageType, initMode?: TransactionEditPageMode, transactionDefaultType?: number) {
@@ -85,6 +99,7 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
     const clientSessionId = ref<string>('');
     const loading = ref<boolean>(true);
     const submitting = ref<boolean>(false);
+    const submitted = ref<boolean>(false);
     const uploadingPicture = ref<boolean>(false);
     const geoLocationStatus = ref<GeoLocationStatus | null>(null);
     const setGeoLocationByClickMap = ref<boolean>(false);
@@ -92,26 +107,33 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
     const transaction = ref<Transaction | TransactionTemplate>(createNewTransactionModel(transactionDefaultType));
 
     const numeralSystem = computed<NumeralSystem>(() => getCurrentNumeralSystemType());
-    const currentTimezoneOffsetMinutes = computed<number>(() => getTimezoneOffsetMinutes(settingsStore.appSettings.timeZone));
+    const currentTimezoneOffsetMinutes = computed<number>(() => getTimezoneOffsetMinutes(transaction.value.time));
     const showAccountBalance = computed<boolean>(() => settingsStore.appSettings.showAccountBalance);
+    const customAccountCategoryOrder = computed<string>(() => settingsStore.appSettings.accountCategoryOrders);
     const defaultCurrency = computed<string>(() => userStore.currentUserDefaultCurrency);
     const defaultAccountId = computed<string>(() => userStore.currentUserDefaultAccountId);
     const firstDayOfWeek = computed<WeekDayValue>(() => userStore.currentUserFirstDayOfWeek);
     const coordinateDisplayType = computed<number>(() => userStore.currentUserCoordinateDisplayType);
 
-    const allTimezones = computed<LocalizedTimezoneInfo[]>(() => getAllTimezones(true));
+    const allTimezones = computed<LocalizedTimezoneInfo[]>(() => {
+        if (type === TransactionEditPageType.Template && transaction.value instanceof TransactionTemplate) {
+            return getAllTimezones(getCurrentUnixTime(), true);
+        } else {
+            return getAllTimezones(transaction.value.time, true)
+        }
+    });
     const allAccounts = computed<Account[]>(() => accountsStore.allPlainAccounts);
     const allVisibleAccounts = computed<Account[]>(() => accountsStore.allVisiblePlainAccounts);
     const allAccountsMap = computed<Record<string, Account>>(() => accountsStore.allAccountsMap);
-    const allVisibleCategorizedAccounts = computed<CategorizedAccountWithDisplayBalance[]>(() => getCategorizedAccountsWithDisplayBalance(allVisibleAccounts.value, showAccountBalance.value));
+    const allVisibleCategorizedAccounts = computed<CategorizedAccountWithDisplayBalance[]>(() => getCategorizedAccountsWithDisplayBalance(allVisibleAccounts.value, showAccountBalance.value, customAccountCategoryOrder.value));
     const allCategories = computed<Record<number, TransactionCategory[]>>(() => transactionCategoriesStore.allTransactionCategories);
     const allCategoriesMap = computed<Record<string, TransactionCategory>>(() => transactionCategoriesStore.allTransactionCategoriesMap);
-    const allTags = computed<TransactionTag[]>(() => transactionTagsStore.allTransactionTags);
     const allTagsMap = computed<Record<string, TransactionTag>>(() => transactionTagsStore.allTransactionTagsMap);
+    const firstVisibleAccountId = computed<string | undefined>(() => allVisibleAccounts.value && allVisibleAccounts.value[0] ? allVisibleAccounts.value[0].id : undefined);
 
-    const hasAvailableExpenseCategories = computed<boolean>(() => transactionCategoriesStore.hasAvailableExpenseCategories);
-    const hasAvailableIncomeCategories = computed<boolean>(() => transactionCategoriesStore.hasAvailableIncomeCategories);
-    const hasAvailableTransferCategories = computed<boolean>(() => transactionCategoriesStore.hasAvailableTransferCategories);
+    const hasVisibleExpenseCategories = computed<boolean>(() => transactionCategoriesStore.hasVisibleExpenseCategories);
+    const hasVisibleIncomeCategories = computed<boolean>(() => transactionCategoriesStore.hasVisibleIncomeCategories);
+    const hasVisibleTransferCategories = computed<boolean>(() => transactionCategoriesStore.hasVisibleTransferCategories);
 
     const canAddTransactionPicture = computed<boolean>(() => {
         if (type !== TransactionEditPageType.Transaction || (mode.value !== TransactionEditPageMode.Add && mode.value !== TransactionEditPageMode.Edit)) {
@@ -150,6 +172,20 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
     const saveButtonTitle = computed<string>(() => {
         if (mode.value === TransactionEditPageMode.Add) {
             return 'Add';
+        } else {
+            return 'Save';
+        }
+    });
+
+    const quickSaveButtonTitle = computed<string>(() => {
+        if (mode.value === TransactionEditPageMode.Add) {
+            const quickAddActionType = TransactionQuickAddButtonActionType.valueOf(settingsStore.appSettings.quickAddButtonActionInMobileTransactionEditPage);
+
+            if (quickAddActionType && quickAddActionType.type !== TransactionQuickAddButtonActionType.OpenMenu.type) {
+                return quickAddActionType.name;
+            } else {
+                return 'Add';
+            }
         } else {
             return 'Save';
         }
@@ -273,7 +309,7 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
     });
 
     const transactionTimezoneTimeDifference = computed<string>(() => {
-        return getTimezoneDifferenceDisplayText(transaction.value.utcOffset);
+        return getTimezoneDifferenceDisplayText(transaction.value.time, transaction.value.utcOffset);
     });
 
     const geoLocationStatusInfo = computed<string>(() => {
@@ -317,7 +353,7 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
             }
         }
 
-        if (type === 'template' && transaction.value instanceof TransactionTemplate) {
+        if (type === TransactionEditPageType.Template && transaction.value instanceof TransactionTemplate) {
             if (!transaction.value.name) {
                 return 'Template name cannot be blank';
             }
@@ -330,8 +366,12 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
         return !!inputEmptyProblemMessage.value;
     });
 
+    function getCurrentUnixTimeForNewTransaction(): number {
+        return getSameDateTimeWithCurrentTimezone(parseDateTimeFromUnixTimeWithBrowserTimezone(getCurrentUnixTime())).getUnixTime();
+    }
+
     function createNewTransactionModel(transactionType?: number): Transaction | TransactionTemplate {
-        const now: number = getCurrentUnixTime();
+        const now: number = getCurrentUnixTimeForNewTransaction();
         const currentTimezone: string = settingsStore.appSettings.timeZone;
 
         let defaultType: TransactionType = TransactionType.Expense;
@@ -342,13 +382,67 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
             defaultType = TransactionType.Transfer;
         }
 
-        let newTransaction: Transaction | TransactionTemplate = Transaction.createNewTransaction(defaultType, now, currentTimezone, getTimezoneOffsetMinutes(currentTimezone));
+        let newTransaction: Transaction | TransactionTemplate = Transaction.createNewTransaction(defaultType, now, currentTimezone, getTimezoneOffsetMinutes(now, currentTimezone));
 
         if (type === TransactionEditPageType.Template) {
             newTransaction = TransactionTemplate.createNewTransactionTemplate(newTransaction);
         }
 
         return newTransaction;
+    }
+
+    function setTransactionModel(newTransaction: Transaction | null, options: SetTransactionOptions | undefined, setContextData: boolean): void {
+        setTransactionModelByTransaction(
+            transaction.value,
+            newTransaction,
+            allCategories.value,
+            allCategoriesMap.value,
+            allVisibleAccounts.value,
+            allAccountsMap.value,
+            allTagsMap.value,
+            defaultAccountId.value,
+            {
+                time: options?.time,
+                type: options?.type,
+                categoryId: options?.categoryId,
+                accountId: options?.accountId,
+                destinationAccountId: options?.destinationAccountId,
+                amount: options?.amount,
+                destinationAmount: options?.destinationAmount,
+                tagIds: options?.tagIds,
+                comment: options?.comment
+            },
+            setContextData
+        );
+    }
+
+    function updateTransactionModelByAfterSaveAction(afterSaveAction: AfterSaveAction, initOptions?: SetTransactionOptions): void {
+        if (afterSaveAction === AfterSaveAction.StayWithNewTransaction) {
+            transaction.value = createNewTransactionModel(transactionDefaultType);
+            setTransactionModel(null, initOptions, true);
+            geoLocationStatus.value = null;
+        } else if (afterSaveAction === AfterSaveAction.StayWithCurrentTransaction) {
+            transaction.value.clearPictures();
+        }
+    }
+
+    function updateTransactionTime(newTime: number): void {
+        transaction.value.time = newTime;
+        updateTransactionTimezone(transaction.value.timeZone ?? '');
+    }
+
+    function updateTransactionTimezone(timezoneName: string): void {
+        const oldUtcOffset = transaction.value.utcOffset;
+
+        for (const timezone of allTimezones.value) {
+            if (timezone.name === timezoneName) {
+                transaction.value.timeZone = timezone.name;
+                transaction.value.utcOffset = timezone.utcOffsetMinutes;
+                break;
+            }
+        }
+
+        transaction.value.time = transaction.value.time - (transaction.value.utcOffset - oldUtcOffset) * 60;
     }
 
     function swapTransactionData(swapAccount: boolean, swapAmount: boolean): void {
@@ -395,13 +489,24 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
         }
     });
 
-    watch(() => transaction.value.timeZone, (newValue) => {
-        for (const timezone of allTimezones.value) {
-            if (timezone.name === newValue) {
-                transaction.value.utcOffset = timezone.utcOffsetMinutes;
-                break;
+    // Watch for account changes and recalculate destination amount for transfers
+    watch(() => [transaction.value.sourceAccountId, transaction.value.destinationAccountId], ([newSourceAccountId, newDestinationAccountId], [oldSourceAccountId, oldDestinationAccountId]) => {
+        if (mode.value === TransactionEditPageMode.View || loading.value) {
+            return;
+        }
+
+        if (transaction.value.type !== TransactionType.Transfer) {
+            return;
+        }
+
+        // Only recalculate if accounts actually changed (skip initial watch call)
+        if (isDefined(oldSourceAccountId) && isDefined(oldDestinationAccountId)) {
+            if (newSourceAccountId === oldSourceAccountId && newDestinationAccountId === oldDestinationAccountId) {
+                return;
             }
         }
+
+        transactionsStore.setTransactionSuitableDestinationAmount(transaction.value, transaction.value.sourceAmount, transaction.value.sourceAmount, oldSourceAccountId, oldDestinationAccountId);
     });
 
     return {
@@ -415,6 +520,7 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
         clientSessionId,
         loading,
         submitting,
+        submitted,
         uploadingPicture,
         geoLocationStatus,
         setGeoLocationByClickMap,
@@ -434,14 +540,15 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
         allVisibleCategorizedAccounts,
         allCategories,
         allCategoriesMap,
-        allTags,
         allTagsMap,
-        hasAvailableExpenseCategories,
-        hasAvailableIncomeCategories,
-        hasAvailableTransferCategories,
+        firstVisibleAccountId,
+        hasVisibleExpenseCategories,
+        hasVisibleIncomeCategories,
+        hasVisibleTransferCategories,
         canAddTransactionPicture,
         title,
         saveButtonTitle,
+        quickSaveButtonTitle,
         cancelButtonTitle,
         sourceAmountName,
         sourceAmountTitle,
@@ -458,6 +565,10 @@ export function useTransactionEditPageBase(type: TransactionEditPageType, initMo
         inputIsEmpty,
         // functions
         createNewTransactionModel,
+        setTransactionModel,
+        updateTransactionModelByAfterSaveAction,
+        updateTransactionTime,
+        updateTransactionTimezone,
         swapTransactionData,
         getDisplayAmount,
         getTransactionPictureUrl

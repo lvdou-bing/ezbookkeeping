@@ -10,6 +10,7 @@ import { useTransactionTemplatesStore } from './transactionTemplate.ts';
 import { useTransactionsStore } from './transaction.ts';
 import { useOverviewStore } from './overview.ts';
 import { useStatisticsStore } from './statistics.ts';
+import { useExplorersStore } from './explorer.ts';
 import { useExchangeRatesStore } from './exchangeRates.ts';
 
 import type { AuthResponse, RegisterResponse } from '@/models/auth_response.ts';
@@ -21,8 +22,8 @@ import type {
     UserProfileUpdateRequest,
     UserProfileUpdateResponse
 } from '@/models/user.ts';
-import type { LocalizedPresetCategory } from '@/core/category.ts';
 import type { ForgetPasswordRequest } from '@/models/forget_password.ts';
+import type { LocalizedPresetCategory } from '@/core/category.ts';
 
 import {
     isObject,
@@ -49,6 +50,7 @@ export const useRootStore = defineStore('root', () => {
     const transactionsStore = useTransactionsStore();
     const overviewStore = useOverviewStore();
     const statisticsStore = useStatisticsStore();
+    const explorersStore = useExplorersStore();
     const exchangeRatesStore = useExchangeRatesStore();
 
     const currentNotification = ref<string | null>(null);
@@ -60,6 +62,7 @@ export const useRootStore = defineStore('root', () => {
 
         setNotificationContent(null);
 
+        explorersStore.resetTransactionExplorers();
         statisticsStore.resetTransactionStatistics();
         overviewStore.resetTransactionOverview();
         transactionsStore.resetTransactions();
@@ -75,6 +78,14 @@ export const useRootStore = defineStore('root', () => {
 
     function setNotificationContent(content: string | null): void {
         currentNotification.value = content;
+    }
+
+    function generateOAuth2LoginUrl(platform: 'mobile' | 'desktop', clientSessionId: string): string {
+        return services.generateOAuth2LoginUrl(platform, clientSessionId);
+    }
+
+    function generateOAuth2LinkUrl(platform: 'mobile' | 'desktop', clientSessionId: string): string {
+        return services.generateOAuth2LinkUrl(platform, clientSessionId);
     }
 
     function authorize(req: UserLoginRequest): Promise<AuthResponse> {
@@ -182,6 +193,54 @@ export const useRootStore = defineStore('root', () => {
                     reject({ error: error.response.data });
                 } else {
                     reject({ message: 'Unable to verify' });
+                }
+            });
+        });
+    }
+
+    function authorizeOAuth2({ password, passcode, callbackToken }: { password?: string, passcode?: string, callbackToken: string }): Promise<AuthResponse> {
+        return new Promise((resolve, reject) => {
+            services.authorizeOAuth2({
+                password,
+                passcode,
+                callbackToken
+            }).then(response => {
+                const data = response.data;
+
+                if (!data || !data.success || !data.result || !data.result.token) {
+                    reject({ message: 'Unable to log in' });
+                    return;
+                }
+
+                if (settingsStore.appSettings.applicationLock || hasUserAppLockState()) {
+                    const appLockState = getUserAppLockState();
+
+                    if (!appLockState || appLockState.username !== data.result.user?.username) {
+                        clearCurrentTokenAndUserInfo(true);
+                        settingsStore.setEnableApplicationLock(false);
+                        settingsStore.setEnableApplicationLockWebAuthn(false);
+                        clearWebAuthnConfig();
+                    }
+                }
+
+                settingsStore.setApplicationSettingsFromCloudSettings(data.result.applicationCloudSettings);
+
+                updateCurrentToken(data.result.token);
+
+                if (data.result.user && isObject(data.result.user)) {
+                    userStore.storeUserBasicInfo(data.result.user);
+                }
+
+                resolve(data.result);
+            }).catch(error => {
+                logger.error('failed to login', error);
+
+                if (error && error.processed) {
+                    reject(error);
+                } else if (error.response && error.response.data && error.response.data.errorMessage) {
+                    reject({ error: error.response.data });
+                } else {
+                    reject({ message: 'Unable to log in' });
                 }
             });
         });
@@ -457,6 +516,46 @@ export const useRootStore = defineStore('root', () => {
         });
     }
 
+    function clearAllUserTransactionsOfAccount({ accountId, password }: { accountId: string, password: string }): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            services.clearAllTransactionsOfAccount({
+                accountId: accountId,
+                password: password
+            }).then(response => {
+                const data = response.data;
+
+                if (!data || !data.success || !data.result) {
+                    reject({ message: 'Unable to clear user data' });
+                    return;
+                }
+
+                if (!accountsStore.accountListStateInvalid) {
+                    accountsStore.updateAccountListInvalidState(true);
+                }
+
+                if (!overviewStore.transactionOverviewStateInvalid) {
+                    overviewStore.updateTransactionOverviewInvalidState(true);
+                }
+
+                if (!statisticsStore.transactionStatisticsStateInvalid) {
+                    statisticsStore.updateTransactionStatisticsInvalidState(true);
+                }
+
+                resolve(data.result);
+            }).catch(error => {
+                logger.error('failed to clear user data', error);
+
+                if (error && error.processed) {
+                    reject(error);
+                } else if (error.response && error.response.data && error.response.data.errorMessage) {
+                    reject({ error: error.response.data });
+                } else {
+                    reject({ message: 'Unable to clear user data' });
+                }
+            });
+        });
+    }
+
     function clearAllUserTransactions({ password }: { password: string }): Promise<boolean> {
         return new Promise((resolve, reject) => {
             services.clearAllTransactions({
@@ -548,8 +647,11 @@ export const useRootStore = defineStore('root', () => {
         currentNotification,
         // functions
         setNotificationContent,
+        generateOAuth2LoginUrl,
+        generateOAuth2LinkUrl,
         authorize,
         authorize2FA,
+        authorizeOAuth2,
         register,
         lock,
         logout,
@@ -560,7 +662,8 @@ export const useRootStore = defineStore('root', () => {
         resetPassword,
         updateUserProfile,
         resendVerifyEmailByLoginedUser,
-        clearAllUserData,
-        clearAllUserTransactions
+        clearAllUserTransactionsOfAccount,
+        clearAllUserTransactions,
+        clearAllUserData
     };
 });

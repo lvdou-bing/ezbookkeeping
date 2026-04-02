@@ -11,13 +11,12 @@ import {
     isNumber
 } from './common.ts';
 import {
-    getBrowserTimezoneOffsetMinutes,
-    getDummyUnixTimeForLocalUsage
+    getTimezoneOffsetMinutes
 } from './datetime.ts';
 import {
     categoryTypeToTransactionType,
     isSubCategoryIdAvailable,
-    getFirstAvailableCategoryId,
+    getFirstVisibleCategoryId,
     getFirstAvailableSubCategoryId
 } from './category.ts';
 
@@ -33,13 +32,14 @@ export interface SetTransactionOptions {
     comment?: string;
 }
 
-export function setTransactionModelByTransaction(transaction: Transaction, transaction2: Transaction | null | undefined, allCategories: Record<number, TransactionCategory[]>, allCategoriesMap: Record<string, TransactionCategory>, allVisibleAccounts: Account[], allAccountsMap: Record<string, Account>, allTagsMap: Record<string, TransactionTag>, defaultAccountId: string, options: SetTransactionOptions, setContextData: boolean, convertContextTime: boolean): void {
+export function setTransactionModelByTransaction(transaction: Transaction, transaction2: Transaction | null | undefined, allCategories: Record<number, TransactionCategory[]>, allCategoriesMap: Record<string, TransactionCategory>, allVisibleAccounts: Account[], allAccountsMap: Record<string, Account>, allTagsMap: Record<string, TransactionTag>, defaultAccountId: string, options: SetTransactionOptions, setContextData: boolean): void {
     if (isDefined(options.time)) {
         transaction.time = options.time;
+        transaction.utcOffset = getTimezoneOffsetMinutes(transaction.time, transaction.timeZone);
     }
 
     if (!options.type && options.categoryId && options.categoryId !== '0' && allCategoriesMap[options.categoryId]) {
-        const category = allCategoriesMap[options.categoryId];
+        const category = allCategoriesMap[options.categoryId] as TransactionCategory;
         const type = categoryTypeToTransactionType(category.type);
 
         if (isNumber(type)) {
@@ -66,7 +66,7 @@ export function setTransactionModelByTransaction(transaction: Transaction, trans
         }
 
         if (!transaction.expenseCategoryId) {
-            transaction.expenseCategoryId = getFirstAvailableCategoryId(allCategories[CategoryType.Expense]);
+            transaction.expenseCategoryId = getFirstVisibleCategoryId(allCategories[CategoryType.Expense]);
         }
     }
 
@@ -81,7 +81,7 @@ export function setTransactionModelByTransaction(transaction: Transaction, trans
         }
 
         if (!transaction.incomeCategoryId) {
-            transaction.incomeCategoryId = getFirstAvailableCategoryId(allCategories[CategoryType.Income]);
+            transaction.incomeCategoryId = getFirstVisibleCategoryId(allCategories[CategoryType.Income]);
         }
     }
 
@@ -96,16 +96,25 @@ export function setTransactionModelByTransaction(transaction: Transaction, trans
         }
 
         if (!transaction.transferCategoryId) {
-            transaction.transferCategoryId = getFirstAvailableCategoryId(allCategories[CategoryType.Transfer]);
+            transaction.transferCategoryId = getFirstVisibleCategoryId(allCategories[CategoryType.Transfer]);
         }
     }
 
     if (allVisibleAccounts.length) {
         if (options.accountId && options.accountId !== '0') {
-            for (let i = 0; i < allVisibleAccounts.length; i++) {
-                if (allVisibleAccounts[i].id === options.accountId) {
+            for (const account of allVisibleAccounts) {
+                if (account.id === options.accountId) {
                     transaction.sourceAccountId = options.accountId;
                     transaction.destinationAccountId = options.accountId;
+                    break;
+                }
+            }
+        }
+
+        if (options.destinationAccountId && options.destinationAccountId !== '0') {
+            for (const account of allVisibleAccounts) {
+                if (account.id === options.destinationAccountId) {
+                    transaction.destinationAccountId = options.destinationAccountId;
                     break;
                 }
             }
@@ -115,7 +124,7 @@ export function setTransactionModelByTransaction(transaction: Transaction, trans
             if (defaultAccountId && allAccountsMap[defaultAccountId] && !allAccountsMap[defaultAccountId].hidden) {
                 transaction.sourceAccountId = defaultAccountId;
             } else {
-                transaction.sourceAccountId = allVisibleAccounts[0].id;
+                transaction.sourceAccountId = allVisibleAccounts[0]!.id;
             }
         }
 
@@ -123,7 +132,7 @@ export function setTransactionModelByTransaction(transaction: Transaction, trans
             if (defaultAccountId && allAccountsMap[defaultAccountId] && !allAccountsMap[defaultAccountId].hidden) {
                 transaction.destinationAccountId = defaultAccountId;
             } else {
-                transaction.destinationAccountId = allVisibleAccounts[0].id;
+                transaction.destinationAccountId = allVisibleAccounts[0]!.id;
             }
         }
     }
@@ -132,8 +141,7 @@ export function setTransactionModelByTransaction(transaction: Transaction, trans
         const tagIds = options.tagIds.split(',');
         const finalTagIds = [];
 
-        for (let i = 0; i < tagIds.length; i++) {
-            const tagId = tagIds[i];
+        for (const tagId of tagIds) {
             const tag = allTagsMap[tagId];
 
             if (tag && !tag.hidden) {
@@ -142,6 +150,10 @@ export function setTransactionModelByTransaction(transaction: Transaction, trans
         }
 
         transaction.tagIds = finalTagIds;
+    }
+
+    if (options.comment) {
+        transaction.comment = options.comment;
     }
 
     if (transaction2) {
@@ -160,14 +172,9 @@ export function setTransactionModelByTransaction(transaction: Transaction, trans
         }
 
         if (setContextData) {
-            transaction.utcOffset = transaction2.utcOffset;
+            transaction.time = transaction2.time;
             transaction.timeZone = transaction2.timeZone;
-
-            if (convertContextTime) {
-                transaction.time = getDummyUnixTimeForLocalUsage(transaction2.time, transaction.utcOffset, getBrowserTimezoneOffsetMinutes());
-            } else {
-                transaction.time = transaction2.time;
-            }
+            transaction.utcOffset = transaction2.utcOffset;
         }
 
         transaction.sourceAccountId = transaction2.sourceAccountId;

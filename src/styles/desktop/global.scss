@@ -83,6 +83,7 @@ input[type=number] {
     background-color: var(--v-expand-panel-title-bg);
 }
 
+.card-title-with-bg > .v-card-title,
 .card-title-with-bg > .v-card-item {
     background-color: var(--v-card-title-bg);
 }
@@ -135,6 +136,16 @@ input[type=number] {
     color: rgba(var(--v-theme-on-background), var(--v-medium-emphasis-opacity));
 }
 
+.text-field-truncate.v-text-field {
+    .v-input__control {
+        .v-field__field {
+            > input.v-field__input {
+                text-overflow: ellipsis !important;
+            }
+        }
+    }
+}
+
 .chart-pointer {
     display: inline-block;
     margin-inline-end: 5px;
@@ -161,6 +172,11 @@ html[dir="rtl"] .bidirectional-switch {
 
 .v-theme--dark .code-container {
     background-color: #2f2f2f;
+}
+
+.chart-tooltip-table {
+    border-collapse: collapse;
+    border-spacing: 0;
 }
 
 /** Common class for replacing the default style of vuetify **/
@@ -256,6 +272,33 @@ html[dir="rtl"] .bidirectional-switch {
                 font-size: 0.8125rem;
             }
         }
+    }
+}
+
+.toggle-buttons {
+    &.v-btn-toggle {
+        height: auto !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+
+    &.v-btn-toggle > .v-btn:not(:first-child) {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        border-left: none;
+    }
+
+    &.v-btn-toggle > .v-btn:not(:last-child) {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+
+    &.v-btn-toggle > .v-btn {
+        border: thin solid rgba(var(--v-border-color), var(--v-border-opacity));
+    }
+
+    &.v-btn-toggle button.v-btn {
+        width: auto !important;
     }
 }
 
@@ -369,6 +412,16 @@ html[dir="rtl"] .v-img.img-with-direction > img {
     }
 }
 
+.table-tooltip {
+    &.v-tooltip > .v-overlay__content {
+        background-color: initial;
+
+        .v-table {
+            box-shadow: 0 6px 16px 0 rgba(var(--v-shadow-key-umbra-color), var(--v-shadow-lg-opacity)), 0 0 transparent, 0 0 transparent;
+        }
+    }
+}
+
 .v-snackbar {
     .v-snackbar__content {
         color: rgb(var(--v-tooltip-color));
@@ -382,6 +435,17 @@ html[dir="rtl"] .v-img.img-with-direction > img {
 .v-switch.v-switch--inset {
     .v-switch__track {
         min-width: 1.875rem !important;
+    }
+}
+
+.scrollable-vertical-tabs.v-tabs {
+    .v-slide-group__prev,
+    .v-slide-group__next {
+        max-height: 16px;
+    }
+
+    &:not(:has(.v-slide-group__prev)) {
+        margin-top: 16px;
     }
 }
 

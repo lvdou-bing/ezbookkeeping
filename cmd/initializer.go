@@ -9,6 +9,7 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/datastore"
 	"github.com/mayswind/ezbookkeeping/pkg/duplicatechecker"
 	"github.com/mayswind/ezbookkeeping/pkg/exchangerates"
+	"github.com/mayswind/ezbookkeeping/pkg/llm"
 	"github.com/mayswind/ezbookkeeping/pkg/log"
 	"github.com/mayswind/ezbookkeeping/pkg/mail"
 	"github.com/mayswind/ezbookkeeping/pkg/settings"
@@ -90,6 +91,15 @@ func initializeSystem(c *core.CliContext) (*settings.Config, error) {
 		return nil, err
 	}
 
+	err = llm.InitializeLargeLanguageModelProvider(config)
+
+	if err != nil {
+		if !isDisableBootLog {
+			log.BootErrorf(c, "[initializer.initializeSystem] initializes large language model provider failed, because %s", err.Error())
+		}
+		return nil, err
+	}
+
 	err = uuid.InitializeUuidGenerator(config)
 
 	if err != nil {
@@ -152,14 +162,62 @@ func getConfigWithoutSensitiveData(config *settings.Config) *settings.Config {
 		return config
 	}
 
-	clonedConfig.DatabaseConfig.DatabasePassword = "****"
-	clonedConfig.SMTPConfig.SMTPPasswd = "****"
-	clonedConfig.MinIOConfig.SecretAccessKey = "****"
-	clonedConfig.SecretKey = "****"
-	clonedConfig.AmapApplicationSecret = "****"
+	if clonedConfig.DatabaseConfig.DatabasePassword != "" {
+		clonedConfig.DatabaseConfig.DatabasePassword = "****"
+	}
 
-	if clonedConfig.WebDAVConfig != nil {
+	if clonedConfig.SMTPConfig.SMTPPasswd != "" {
+		clonedConfig.SMTPConfig.SMTPPasswd = "****"
+	}
+
+	if clonedConfig.MinIOConfig.SecretAccessKey != "" {
+		clonedConfig.MinIOConfig.SecretAccessKey = "****"
+	}
+
+	if clonedConfig.SecretKey != "" {
+		clonedConfig.SecretKey = "****"
+	}
+
+	if clonedConfig.AmapApplicationSecret != "" {
+		clonedConfig.AmapApplicationSecret = "****"
+	}
+
+	if clonedConfig.WebDAVConfig != nil && clonedConfig.WebDAVConfig.Password != "" {
 		clonedConfig.WebDAVConfig.Password = "****"
+	}
+
+	if clonedConfig.ReceiptImageRecognitionLLMConfig != nil {
+		if clonedConfig.ReceiptImageRecognitionLLMConfig.OpenAIAPIKey != "" {
+			clonedConfig.ReceiptImageRecognitionLLMConfig.OpenAIAPIKey = "****"
+		}
+
+		if clonedConfig.ReceiptImageRecognitionLLMConfig.OpenAICompatibleAPIKey != "" {
+			clonedConfig.ReceiptImageRecognitionLLMConfig.OpenAICompatibleAPIKey = "****"
+		}
+
+		if clonedConfig.ReceiptImageRecognitionLLMConfig.AnthropicCompatibleAPIKey != "" {
+			clonedConfig.ReceiptImageRecognitionLLMConfig.AnthropicCompatibleAPIKey = "****"
+		}
+
+		if clonedConfig.ReceiptImageRecognitionLLMConfig.AnthropicAPIKey != "" {
+			clonedConfig.ReceiptImageRecognitionLLMConfig.AnthropicAPIKey = "****"
+		}
+
+		if clonedConfig.ReceiptImageRecognitionLLMConfig.OpenRouterAPIKey != "" {
+			clonedConfig.ReceiptImageRecognitionLLMConfig.OpenRouterAPIKey = "****"
+		}
+
+		if clonedConfig.ReceiptImageRecognitionLLMConfig.LMStudioToken != "" {
+			clonedConfig.ReceiptImageRecognitionLLMConfig.LMStudioToken = "****"
+		}
+
+		if clonedConfig.ReceiptImageRecognitionLLMConfig.GoogleAIAPIKey != "" {
+			clonedConfig.ReceiptImageRecognitionLLMConfig.GoogleAIAPIKey = "****"
+		}
+	}
+
+	if clonedConfig.OAuth2ClientSecret != "" {
+		clonedConfig.OAuth2ClientSecret = "****"
 	}
 
 	return clonedConfig

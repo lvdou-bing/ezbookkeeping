@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/utils"
 )
 
+const pageCountForClearTransactions = 1000
 const pageCountForDataExport = 1000
 
 // DataManagementsApi represents data management api
@@ -26,9 +28,11 @@ type DataManagementsApi struct {
 	transactions            *services.TransactionService
 	categories              *services.TransactionCategoryService
 	tags                    *services.TransactionTagService
+	tagGroups               *services.TransactionTagGroupService
 	pictures                *services.TransactionPictureService
 	templates               *services.TransactionTemplateService
 	userCustomExchangeRates *services.UserCustomExchangeRatesService
+	insightsExploreres      *services.InsightsExplorerService
 }
 
 // Initialize a data management api singleton instance
@@ -43,9 +47,11 @@ var (
 		transactions:            services.Transactions,
 		categories:              services.TransactionCategories,
 		tags:                    services.TransactionTags,
+		tagGroups:               services.TransactionTagGroups,
 		pictures:                services.TransactionPictures,
 		templates:               services.TransactionTemplates,
 		userCustomExchangeRates: services.UserCustomExchangeRates,
+		insightsExploreres:      services.InsightsExplorers,
 	}
 )
 
@@ -97,6 +103,13 @@ func (a *DataManagementsApi) DataStatisticsHandler(c *core.WebContext) (any, *er
 		return nil, errs.ErrOperationFailed
 	}
 
+	totalInsightsExplorerCount, err := a.insightsExploreres.GetTotalInsightsExplorersCountByUid(c, uid)
+
+	if err != nil {
+		log.Errorf(c, "[data_managements.DataStatisticsHandler] failed to get total insights explorer count for user \"uid:%d\", because %s", uid, err.Error())
+		return nil, errs.ErrOperationFailed
+	}
+
 	totalTransactionTemplateCount, err := a.templates.GetTotalNormalTemplateCountByUid(c, uid)
 
 	if err != nil {
@@ -117,6 +130,7 @@ func (a *DataManagementsApi) DataStatisticsHandler(c *core.WebContext) (any, *er
 		TotalTransactionTagCount:       totalTransactionTagCount,
 		TotalTransactionCount:          totalTransactionCount,
 		TotalTransactionPictureCount:   totalTransactionPictureCount,
+		TotalInsightsExplorerCount:     totalInsightsExplorerCount,
 		TotalTransactionTemplateCount:  totalTransactionTemplateCount,
 		TotalScheduledTransactionCount: totalScheduledTransactionCount,
 	}
@@ -181,10 +195,24 @@ func (a *DataManagementsApi) ClearAllDataHandler(c *core.WebContext) (any, *errs
 		return nil, errs.Or(err, errs.ErrOperationFailed)
 	}
 
+	err = a.tagGroups.DeleteAllTagGroups(c, uid)
+
+	if err != nil {
+		log.Errorf(c, "[data_managements.ClearAllDataHandler] failed to delete all transaction tag groups, because %s", err.Error())
+		return nil, errs.Or(err, errs.ErrOperationFailed)
+	}
+
 	err = a.userCustomExchangeRates.DeleteAllCustomExchangeRates(c, uid)
 
 	if err != nil {
 		log.Errorf(c, "[data_managements.ClearAllDataHandler] failed to delete all user custom exchange rates, because %s", err.Error())
+		return nil, errs.Or(err, errs.ErrOperationFailed)
+	}
+
+	err = a.insightsExploreres.DeleteAllInsightsExplorers(c, uid)
+
+	if err != nil {
+		log.Errorf(c, "[data_managements.ClearAllDataHandler] failed to delete all insights explorers, because %s", err.Error())
 		return nil, errs.Or(err, errs.ErrOperationFailed)
 	}
 
@@ -232,6 +260,61 @@ func (a *DataManagementsApi) ClearAllTransactionsHandler(c *core.WebContext) (an
 	return true, nil
 }
 
+// ClearAllTransactionsByAccountHandler deletes all transactions of specified account
+func (a *DataManagementsApi) ClearAllTransactionsByAccountHandler(c *core.WebContext) (any, *errs.Error) {
+	var clearDataReq models.ClearAccountTransactionsRequest
+	err := c.ShouldBindJSON(&clearDataReq)
+
+	if err != nil {
+		log.Warnf(c, "[data_managements.ClearAllTransactionsByAccountHandler] parse request failed, because %s", err.Error())
+		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+
+	uid := c.GetCurrentUid()
+	user, err := a.users.GetUserById(c, uid)
+
+	if err != nil {
+		if !errs.IsCustomError(err) {
+			log.Warnf(c, "[data_managements.ClearAllTransactionsByAccountHandler] failed to get user for user \"uid:%d\", because %s", uid, err.Error())
+		}
+
+		return nil, errs.ErrUserNotFound
+	}
+
+	if !a.users.IsPasswordEqualsUserPassword(clearDataReq.Password, user) {
+		return nil, errs.ErrUserPasswordWrong
+	}
+
+	if user.FeatureRestriction.Contains(core.USER_FEATURE_RESTRICTION_TYPE_CLEAR_ALL_DATA) {
+		return nil, errs.ErrNotPermittedToPerformThisAction
+	}
+
+	account, err := a.accounts.GetAccountByAccountId(c, uid, clearDataReq.AccountId)
+
+	if err != nil {
+		log.Errorf(c, "[data_managements.ClearAllTransactionsByAccountHandler] failed to get account \"id:%d\" for user \"uid:%d\", because %s", uid, clearDataReq.AccountId, err.Error())
+		return nil, errs.Or(err, errs.ErrOperationFailed)
+	}
+
+	if account.Hidden {
+		return nil, errs.ErrCannotDeleteTransactionInHiddenAccount
+	}
+
+	if account.Type == models.ACCOUNT_TYPE_MULTI_SUB_ACCOUNTS {
+		return nil, errs.ErrCannotDeleteTransactionInParentAccount
+	}
+
+	err = a.transactions.DeleteAllTransactionsOfAccount(c, uid, account.AccountId, pageCountForClearTransactions)
+
+	if err != nil {
+		log.Errorf(c, "[data_managements.ClearAllTransactionsByAccountHandler] failed to delete all transactions in account \"id:%d\", because %s", account.AccountId, err.Error())
+		return nil, errs.Or(err, errs.ErrOperationFailed)
+	}
+
+	log.Infof(c, "[data_managements.ClearAllTransactionsByAccountHandler] user \"uid:%d\" has cleared all transactions in account \"id:%d\"", uid, account.AccountId)
+	return true, nil
+}
+
 func (a *DataManagementsApi) getExportedFileContent(c *core.WebContext, fileType string) ([]byte, string, *errs.Error) {
 	if !a.CurrentConfig().EnableDataExport {
 		return nil, "", errs.ErrDataExportNotAllowed
@@ -241,17 +324,15 @@ func (a *DataManagementsApi) getExportedFileContent(c *core.WebContext, fileType
 	err := c.ShouldBindQuery(&exportTransactionDataReq)
 
 	if err != nil {
-		log.Warnf(c, "[data_managements.ExportDataHandler] parse request failed, because %s", err.Error())
+		log.Warnf(c, "[data_managements.getExportedFileContent] parse request failed, because %s", err.Error())
 		return nil, "", errs.NewIncompleteOrIncorrectSubmissionError(err)
 	}
 
-	timezone := time.Local
-	utcOffset, err := c.GetClientTimezoneOffset()
+	clientTimezone, err := c.GetClientTimezone()
 
 	if err != nil {
-		log.Warnf(c, "[data_managements.ExportDataHandler] cannot get client timezone offset, because %s", err.Error())
-	} else {
-		timezone = time.FixedZone("Client Timezone", int(utcOffset)*60)
+		log.Warnf(c, "[data_managements.getExportedFileContent] cannot get client timezone, because %s", err.Error())
+		clientTimezone = time.Local
 	}
 
 	uid := c.GetCurrentUid()
@@ -259,7 +340,7 @@ func (a *DataManagementsApi) getExportedFileContent(c *core.WebContext, fileType
 
 	if err != nil {
 		if !errs.IsCustomError(err) {
-			log.Warnf(c, "[data_managements.ExportDataHandler] failed to get user for user \"uid:%d\", because %s", uid, err.Error())
+			log.Warnf(c, "[data_managements.getExportedFileContent] failed to get user for user \"uid:%d\", because %s", uid, err.Error())
 		}
 
 		return nil, "", errs.ErrUserNotFound
@@ -272,28 +353,28 @@ func (a *DataManagementsApi) getExportedFileContent(c *core.WebContext, fileType
 	accounts, err := a.accounts.GetAllAccountsByUid(c, uid)
 
 	if err != nil {
-		log.Errorf(c, "[data_managements.ExportDataHandler] failed to get all accounts for user \"uid:%d\", because %s", uid, err.Error())
+		log.Errorf(c, "[data_managements.getExportedFileContent] failed to get all accounts for user \"uid:%d\", because %s", uid, err.Error())
 		return nil, "", errs.ErrOperationFailed
 	}
 
 	categories, err := a.categories.GetAllCategoriesByUid(c, uid, 0, -1)
 
 	if err != nil {
-		log.Errorf(c, "[data_managements.ExportDataHandler] failed to get categories for user \"uid:%d\", because %s", uid, err.Error())
+		log.Errorf(c, "[data_managements.getExportedFileContent] failed to get categories for user \"uid:%d\", because %s", uid, err.Error())
 		return nil, "", errs.ErrOperationFailed
 	}
 
 	tags, err := a.tags.GetAllTagsByUid(c, uid)
 
 	if err != nil {
-		log.Errorf(c, "[data_managements.ExportDataHandler] failed to get tags for user \"uid:%d\", because %s", uid, err.Error())
+		log.Errorf(c, "[data_managements.getExportedFileContent] failed to get tags for user \"uid:%d\", because %s", uid, err.Error())
 		return nil, "", errs.ErrOperationFailed
 	}
 
 	tagIndexes, err := a.tags.GetAllTagIdsMapOfAllTransactions(c, uid)
 
 	if err != nil {
-		log.Errorf(c, "[data_managements.ExportDataHandler] failed to get tag index for user \"uid:%d\", because %s", uid, err.Error())
+		log.Errorf(c, "[data_managements.getExportedFileContent] failed to get tag index for user \"uid:%d\", because %s", uid, err.Error())
 		return nil, "", errs.ErrOperationFailed
 	}
 
@@ -304,30 +385,30 @@ func (a *DataManagementsApi) getExportedFileContent(c *core.WebContext, fileType
 	allAccountIds, err := a.accounts.GetAccountOrSubAccountIds(c, exportTransactionDataReq.AccountIds, uid)
 
 	if err != nil {
-		log.Warnf(c, "[data_managements.ExportDataHandler] get account error, because %s", err.Error())
+		log.Warnf(c, "[data_managements.getExportedFileContent] get account error, because %s", err.Error())
 		return nil, "", errs.Or(err, errs.ErrOperationFailed)
 	}
 
 	allCategoryIds, err := a.categories.GetCategoryOrSubCategoryIds(c, exportTransactionDataReq.CategoryIds, uid)
 
 	if err != nil {
-		log.Warnf(c, "[data_managements.ExportDataHandler] get transaction category error, because %s", err.Error())
+		log.Warnf(c, "[data_managements.getExportedFileContent] get transaction category error, because %s", err.Error())
 		return nil, "", errs.Or(err, errs.ErrOperationFailed)
 	}
 
-	var allTagIds []int64
-	noTags := exportTransactionDataReq.TagIds == "none"
+	noTags := exportTransactionDataReq.TagFilter == models.TransactionNoTagFilterValue
+	var tagFilters []*models.TransactionTagFilter
 
 	if !noTags {
-		allTagIds, err = a.tags.GetTagIds(exportTransactionDataReq.TagIds)
+		tagFilters, err = models.ParseTransactionTagFilter(exportTransactionDataReq.TagFilter)
 
 		if err != nil {
-			log.Warnf(c, "[data_managements.ExportDataHandler] get transaction tag ids error, because %s", err.Error())
+			log.Warnf(c, "[data_managements.getExportedFileContent] parse transaction tag filters error, because %s", err.Error())
 			return nil, "", errs.Or(err, errs.ErrOperationFailed)
 		}
 	}
 
-	maxTransactionTime := utils.GetMaxTransactionTimeFromUnixTime(time.Now().Unix())
+	maxTransactionTime := int64(math.MaxInt64)
 	minTransactionTime := int64(0)
 
 	if exportTransactionDataReq.MaxTime > 0 {
@@ -338,10 +419,10 @@ func (a *DataManagementsApi) getExportedFileContent(c *core.WebContext, fileType
 		minTransactionTime = utils.GetMinTransactionTimeFromUnixTime(exportTransactionDataReq.MinTime)
 	}
 
-	allTransactions, err := a.transactions.GetAllSpecifiedTransactions(c, uid, maxTransactionTime, minTransactionTime, exportTransactionDataReq.Type, allCategoryIds, allAccountIds, allTagIds, noTags, exportTransactionDataReq.TagFilterType, exportTransactionDataReq.AmountFilter, exportTransactionDataReq.Keyword, pageCountForDataExport, true)
+	allTransactions, err := a.transactions.GetAllSpecifiedTransactions(c, uid, maxTransactionTime, minTransactionTime, exportTransactionDataReq.Type, allCategoryIds, allAccountIds, tagFilters, noTags, exportTransactionDataReq.AmountFilter, exportTransactionDataReq.Keyword, pageCountForDataExport, true)
 
 	if err != nil {
-		log.Errorf(c, "[data_managements.ExportDataHandler] failed to all transactions user \"uid:%d\", because %s", uid, err.Error())
+		log.Errorf(c, "[data_managements.getExportedFileContent] failed to all transactions user \"uid:%d\", because %s", uid, err.Error())
 		return nil, "", errs.ErrOperationFailed
 	}
 
@@ -354,17 +435,17 @@ func (a *DataManagementsApi) getExportedFileContent(c *core.WebContext, fileType
 	result, err := dataExporter.ToExportedContent(c, uid, allTransactions, accountMap, categoryMap, tagMap, tagIndexes)
 
 	if err != nil {
-		log.Errorf(c, "[data_managements.ExportDataHandler] failed to get csv format exported data for \"uid:%d\", because %s", uid, err.Error())
+		log.Errorf(c, "[data_managements.getExportedFileContent] failed to get exported data for \"uid:%d\", because %s", uid, err.Error())
 		return nil, "", errs.Or(err, errs.ErrOperationFailed)
 	}
 
-	fileName := a.getFileName(user, timezone, fileType)
+	fileName := a.getFileName(user, clientTimezone, fileType)
 
 	return result, fileName, nil
 }
 
-func (a *DataManagementsApi) getFileName(user *models.User, timezone *time.Location, fileExtension string) string {
-	currentTime := utils.FormatUnixTimeToLongDateTimeWithoutSecond(time.Now().Unix(), timezone)
+func (a *DataManagementsApi) getFileName(user *models.User, clientTimezone *time.Location, fileExtension string) string {
+	currentTime := utils.FormatUnixTimeToLongDateTimeWithoutSecond(time.Now().Unix(), clientTimezone)
 	currentTime = strings.Replace(currentTime, "-", "_", -1)
 	currentTime = strings.Replace(currentTime, " ", "_", -1)
 	currentTime = strings.Replace(currentTime, ":", "_", -1)

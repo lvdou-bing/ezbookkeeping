@@ -1,10 +1,17 @@
 import de from './de.json';
 import en from './en.json';
 import es from './es.json';
+import fr from './fr.json';
 import it from './it.json';
 import ja from './ja.json';
+import kn from './kn.json';
+import ko from './ko.json';
 import nl from './nl.json';
 import ru from './ru.json';
+import sl from './sl.json';
+import ta from './ta.json';
+import th from './th.json';
+import tr from './tr.json';
 import uk from './uk.json';
 import vi from './vi.json';
 import zhHans from './zh_Hans.json';
@@ -51,6 +58,13 @@ export const ALL_LANGUAGES: Record<string, LanguageInfo> = {
         textDirection: 'ltr',
         content: es
     },
+    'fr': {
+        name: "French",
+        displayName: "Français",
+        alternativeLanguageTag: "fr-FR",
+        textDirection: "ltr",
+        content: fr,
+    },
     'it': {
         name: 'Italian',
         displayName: 'Italiano',
@@ -64,6 +78,20 @@ export const ALL_LANGUAGES: Record<string, LanguageInfo> = {
         alternativeLanguageTag: 'ja-JP',
         textDirection: 'ltr',
         content: ja
+    },
+    'kn': {
+        name: 'Kannada',
+        displayName: 'ಕನ್ನಡ',
+        alternativeLanguageTag: 'kn-IN',
+        textDirection: 'ltr',
+        content: kn
+    },
+    'ko': {
+        name: 'Korean',
+        displayName: '한국어',
+        alternativeLanguageTag: 'ko-KR',
+        textDirection: 'ltr',
+        content: ko
     },
     'nl': {
         name: 'Dutch',
@@ -85,6 +113,34 @@ export const ALL_LANGUAGES: Record<string, LanguageInfo> = {
         alternativeLanguageTag: 'ru-RU',
         textDirection: 'ltr',
         content: ru
+    },
+    'sl': {
+        name: 'Slovenian',
+        displayName: 'Slovenščina',
+        alternativeLanguageTag: 'sl-SI',
+        textDirection: 'ltr',
+        content: sl
+    },
+    'ta': {
+        name: 'Tamil',
+        displayName: 'தமிழ்',
+        alternativeLanguageTag: 'ta-IN',
+        textDirection: 'ltr',
+        content: ta
+    },
+    'th': {
+        name: 'Thai',
+        displayName: 'ภาษาไทย',
+        alternativeLanguageTag: 'th-TH',
+        textDirection: 'ltr',
+        content: th
+    },
+    'tr': {
+        name: 'Turkish',
+        displayName: 'Türkçe',
+        alternativeLanguageTag: 'tr-TR',
+        textDirection: 'ltr',
+        content: tr
     },
     'uk': {
         name: 'Ukrainian',

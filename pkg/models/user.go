@@ -161,7 +161,7 @@ type UserLoginRequest struct {
 type UserRegisterRequest struct {
 	Username        string       `json:"username" binding:"required,notBlank,max=32,validUsername"`
 	Email           string       `json:"email" binding:"required,notBlank,max=100,validEmail"`
-	Nickname        string       `json:"nickname" binding:"required,notBlank,max=64"`
+	Nickname        string       `json:"nickname" binding:"required,notBlank,max=64,validNickname"`
 	Password        string       `json:"password" binding:"required,min=6,max=128"`
 	Language        string       `json:"language" binding:"required,min=2,max=16"`
 	DefaultCurrency string       `json:"defaultCurrency" binding:"required,len=3,validCurrency"`
@@ -190,7 +190,7 @@ type UserResendVerifyEmailRequest struct {
 // UserProfileUpdateRequest represents all parameters of user updating profile request
 type UserProfileUpdateRequest struct {
 	Email                 string                      `json:"email" binding:"omitempty,notBlank,max=100,validEmail"`
-	Nickname              string                      `json:"nickname" binding:"omitempty,notBlank,max=64"`
+	Nickname              string                      `json:"nickname" binding:"omitempty,notBlank,max=64,validNickname"`
 	Password              string                      `json:"password" binding:"omitempty,min=6,max=128"`
 	OldPassword           string                      `json:"oldPassword" binding:"omitempty,min=6,max=128"`
 	DefaultAccountId      int64                       `json:"defaultAccountId,string" binding:"omitempty,min=1"`
@@ -225,11 +225,12 @@ type UserProfileUpdateResponse struct {
 // UserProfileResponse represents a view-object of user profile
 type UserProfileResponse struct {
 	*UserBasicInfo
+	NoPassword  bool  `json:"noPassword,omitempty"`
 	LastLoginAt int64 `json:"lastLoginAt"`
 }
 
 // CanEditTransactionByTransactionTime returns whether this user can edit transaction with specified transaction time
-func (u *User) CanEditTransactionByTransactionTime(transactionTime int64, utcOffset int16) bool {
+func (u *User) CanEditTransactionByTransactionTime(transactionTime int64, clientTimezone *time.Location) bool {
 	if u.TransactionEditScope == TRANSACTION_EDIT_SCOPE_NONE {
 		return false
 	} else if u.TransactionEditScope == TRANSACTION_EDIT_SCOPE_ALL {
@@ -241,15 +242,14 @@ func (u *User) CanEditTransactionByTransactionTime(transactionTime int64, utcOff
 	transactionUnixTime := utils.GetUnixTimeFromTransactionTime(transactionTime)
 
 	if u.TransactionEditScope == TRANSACTION_EDIT_SCOPE_LAST_24H_OR_LATER {
-		return transactionUnixTime >= now.Unix()-24*60*60
+		return transactionUnixTime >= now.Add(-24*time.Hour).Unix()
 	}
 
-	clientLocation := time.FixedZone("Client Timezone", int(utcOffset)*60)
-	clientNow := now.In(clientLocation)
-	clientTodayFirstUnixTime := clientNow.Unix() - int64(clientNow.Hour()*60*60+clientNow.Minute()*60+clientNow.Second())
+	clientNow := now.In(clientTimezone)
+	clientTodayStartTime := utils.GetStartOfDay(clientNow)
 
 	if u.TransactionEditScope == TRANSACTION_EDIT_SCOPE_TODAY_OR_LATER {
-		return transactionUnixTime >= clientTodayFirstUnixTime
+		return transactionUnixTime >= clientTodayStartTime.Unix()
 	} else if u.TransactionEditScope == TRANSACTION_EDIT_SCOPE_THIS_WEEK_OR_LATER {
 		dayOfWeek := int(now.Weekday()) - int(u.FirstDayOfWeek)
 
@@ -257,14 +257,14 @@ func (u *User) CanEditTransactionByTransactionTime(transactionTime int64, utcOff
 			dayOfWeek += 7
 		}
 
-		clientWeekFirstUnixTime := clientTodayFirstUnixTime - int64(dayOfWeek*24*60*60)
-		return transactionUnixTime >= clientWeekFirstUnixTime
+		clientWeekStartTime := clientTodayStartTime.AddDate(0, 0, -dayOfWeek)
+		return transactionUnixTime >= clientWeekStartTime.Unix()
 	} else if u.TransactionEditScope == TRANSACTION_EDIT_SCOPE_THIS_MONTH_OR_LATER {
-		clientMonthFirstUnixTime := clientTodayFirstUnixTime - int64((now.Day()-1)*24*60*60)
-		return transactionUnixTime >= clientMonthFirstUnixTime
+		clientMonthStartTime := clientTodayStartTime.AddDate(0, 0, -(now.Day() - 1))
+		return transactionUnixTime >= clientMonthStartTime.Unix()
 	} else if u.TransactionEditScope == TRANSACTION_EDIT_SCOPE_THIS_YEAR_OR_LATER {
-		clientYearFirstUnixTime := clientTodayFirstUnixTime - int64((now.YearDay()-1)*24*60*60)
-		return transactionUnixTime >= clientYearFirstUnixTime
+		clientYearStartTime := clientTodayStartTime.AddDate(0, 0, -(now.YearDay() - 1))
+		return transactionUnixTime >= clientYearStartTime.Unix()
 	}
 
 	return false
@@ -313,6 +313,7 @@ func (u *User) ToUserBasicInfo(avatarProvider core.UserAvatarProviderType, avata
 func (u *User) ToUserProfileResponse(basicInfo *UserBasicInfo) *UserProfileResponse {
 	return &UserProfileResponse{
 		UserBasicInfo: basicInfo,
+		NoPassword:    u.Password == "",
 		LastLoginAt:   u.LastLoginUnixTime,
 	}
 }

@@ -1,10 +1,10 @@
 <template>
     <v-dialog width="1000" :persistent="loading || !!rules.length || !!newRule.targetId" v-model="showState">
-        <v-card class="pa-2 pa-sm-4 pa-md-4">
+        <v-card class="pa-sm-1 pa-md-2">
             <template #title>
-                <div class="d-flex align-center justify-center">
-                    <div class="d-flex w-100 align-center justify-center">
-                        <h4 class="text-h4">{{ tt('Batch Replace Categories / Accounts / Tags') }}</h4>
+                <div class="d-flex flex-wrap align-center justify-center">
+                    <div class="d-flex flex-wrap align-center">
+                        <h4 class="text-h4 text-wrap">{{ tt('Batch Replace Categories / Accounts / Tags') }}</h4>
                         <v-btn density="compact" color="default" variant="text" size="24"
                                class="ms-2" :icon="true" :disabled="loading"
                                :loading="loading" @click="reload">
@@ -15,6 +15,7 @@
                             <v-tooltip activator="parent">{{ tt('Refresh') }}</v-tooltip>
                         </v-btn>
                     </div>
+                    <v-spacer/>
                     <v-btn density="comfortable" color="default" variant="text" class="ms-2"
                            :icon="true" :disabled="loading">
                         <v-icon :icon="mdiDotsVertical" />
@@ -31,10 +32,10 @@
                     </v-btn>
                 </div>
             </template>
-            <v-card-text class="my-md-4 w-100 d-flex justify-center">
+            <v-card-text class="w-100 d-flex justify-center">
                 <v-row>
                     <v-col cols="12">
-                        <v-table fixed-header fixed-footer height="400" striped="even">
+                        <v-table density="comfortable" fixed-header fixed-footer height="400" striped="even">
                             <thead>
                                 <tr>
                                     <th class="text-left">{{ tt('Type') }}</th>
@@ -57,7 +58,7 @@
                             <tfoot>
                                 <tr style="background-color: rgb(var(--v-theme-surface))">
                                     <td>
-                                        <v-select class="w-100" density="compact" variant="outlined"
+                                        <v-select class="w-100" density="compact" variant="underlined"
                                                   item-title="name"
                                                   item-value="value"
                                                   :disabled="loading"
@@ -88,7 +89,7 @@
                                         />
                                     </td>
                                     <td>
-                                        <v-autocomplete class="w-100" density="compact" variant="outlined"
+                                        <v-autocomplete class="w-100" density="compact" variant="underlined"
                                                         item-title="name" item-value="value" persistent-placeholder
                                                         :disabled="loading" :items="sourceItems"
                                                         :no-data-text="noSourceItemText"
@@ -96,14 +97,14 @@
                                         </v-autocomplete>
                                     </td>
                                     <td>
-                                        <two-column-select density="compact" variant="outlined"
+                                        <two-column-select density="compact" variant="underlined"
                                                            primary-key-field="id" primary-value-field="id" primary-title-field="name"
                                                            primary-icon-field="icon" primary-icon-type="category" primary-color-field="color"
                                                            primary-hidden-field="hidden" primary-sub-items-field="subCategories"
                                                            secondary-key-field="id" secondary-value-field="id" secondary-title-field="name"
                                                            secondary-icon-field="icon" secondary-icon-type="category" secondary-color-field="color"
                                                            secondary-hidden-field="hidden"
-                                                           :disabled="loading || !hasAvailableExpenseCategories"
+                                                           :disabled="loading || !hasVisibleExpenseCategories"
                                                            :enable-filter="true" :filter-placeholder="tt('Find category')" :filter-no-items-text="tt('No available category')"
                                                            :show-selection-primary-text="true"
                                                            :custom-selection-primary-text="getTransactionPrimaryCategoryName(newRule.targetId, allCategories[CategoryType.Expense])"
@@ -112,14 +113,14 @@
                                                            v-model="newRule.targetId"
                                                            v-if="newRule.dataType === 'expenseCategory'">
                                         </two-column-select>
-                                        <two-column-select density="compact" variant="outlined"
+                                        <two-column-select density="compact" variant="underlined"
                                                            primary-key-field="id" primary-value-field="id" primary-title-field="name"
                                                            primary-icon-field="icon" primary-icon-type="category" primary-color-field="color"
                                                            primary-hidden-field="hidden" primary-sub-items-field="subCategories"
                                                            secondary-key-field="id" secondary-value-field="id" secondary-title-field="name"
                                                            secondary-icon-field="icon" secondary-icon-type="category" secondary-color-field="color"
                                                            secondary-hidden-field="hidden"
-                                                           :disabled="loading || !hasAvailableIncomeCategories"
+                                                           :disabled="loading || !hasVisibleIncomeCategories"
                                                            :enable-filter="true" :filter-placeholder="tt('Find category')" :filter-no-items-text="tt('No available category')"
                                                            :show-selection-primary-text="true"
                                                            :custom-selection-primary-text="getTransactionPrimaryCategoryName(newRule.targetId, allCategories[CategoryType.Income])"
@@ -128,14 +129,14 @@
                                                            v-model="newRule.targetId"
                                                            v-if="newRule.dataType === 'incomeCategory'">
                                         </two-column-select>
-                                        <two-column-select density="compact" variant="outlined"
+                                        <two-column-select density="compact" variant="underlined"
                                                            primary-key-field="id" primary-value-field="id" primary-title-field="name"
                                                            primary-icon-field="icon" primary-icon-type="category" primary-color-field="color"
                                                            primary-hidden-field="hidden" primary-sub-items-field="subCategories"
                                                            secondary-key-field="id" secondary-value-field="id" secondary-title-field="name"
                                                            secondary-icon-field="icon" secondary-icon-type="category" secondary-color-field="color"
                                                            secondary-hidden-field="hidden"
-                                                           :disabled="loading || !hasAvailableTransferCategories"
+                                                           :disabled="loading || !hasVisibleTransferCategories"
                                                            :enable-filter="true" :filter-placeholder="tt('Find category')" :filter-no-items-text="tt('No available category')"
                                                            :show-selection-primary-text="true"
                                                            :custom-selection-primary-text="getTransactionPrimaryCategoryName(newRule.targetId, allCategories[CategoryType.Transfer])"
@@ -144,7 +145,7 @@
                                                            v-model="newRule.targetId"
                                                            v-if="newRule.dataType === 'transferCategory'">
                                         </two-column-select>
-                                        <two-column-select density="compact" variant="outlined"
+                                        <two-column-select density="compact" variant="underlined"
                                                            primary-key-field="id" primary-value-field="category"
                                                            primary-title-field="name" primary-footer-field="displayBalance"
                                                            primary-icon-field="icon" primary-icon-type="account"
@@ -160,10 +161,10 @@
                                                            v-model="newRule.targetId"
                                                            v-if="newRule.dataType === 'account'">
                                         </two-column-select>
-                                        <v-autocomplete density="compact" variant="outlined"
+                                        <v-autocomplete density="compact" variant="underlined"
                                                         item-title="name" item-value="id"
                                                         persistent-placeholder chips
-                                                        :disabled="loading" :items="allTags"
+                                                        :disabled="loading" :items="allTagsWithGroupHeader"
                                                         :no-data-text="tt('No available tag')"
                                                         v-model="newRule.targetId"
                                                         v-if="newRule.dataType == 'tag'">
@@ -171,8 +172,12 @@
                                                 <v-chip :prepend-icon="mdiPound" :text="item.title" v-bind="props" v-if="newRule.targetId"/>
                                             </template>
 
+                                            <template #subheader="{ props }">
+                                                <v-list-subheader>{{ props['title'] }}</v-list-subheader>
+                                            </template>
+
                                             <template #item="{ props, item }">
-                                                <v-list-item :value="item.value" v-bind="props" v-if="!item.raw.hidden">
+                                                <v-list-item :value="item.value" v-bind="props" v-if="item.raw instanceof TransactionTag && !item.raw.hidden">
                                                     <template #title>
                                                         <v-list-item-title>
                                                             <div class="d-flex align-center">
@@ -196,8 +201,8 @@
                     </v-col>
                 </v-row>
             </v-card-text>
-            <v-card-text class="overflow-y-visible">
-                <div class="w-100 d-flex justify-center gap-4">
+            <v-card-text>
+                <div class="w-100 d-flex justify-center flex-wrap mt-sm-1 mt-md-2 gap-4">
                     <v-btn :disabled="loading" @click="confirm">{{ tt('OK') }}</v-btn>
                     <v-btn color="secondary" variant="tonal" :disabled="loading" @click="cancel">{{ tt('Cancel') }}</v-btn>
                 </div>
@@ -214,6 +219,7 @@ import SnackBar from '@/components/desktop/SnackBar.vue';
 import { ref, computed, useTemplateRef } from 'vue';
 
 import { useI18n } from '@/locales/helpers.ts';
+import { useTransactionTagSelectionBase } from '@/components/base/TransactionTagSelectionBase.ts';
 
 import { useSettingsStore } from '@/stores/setting.ts';
 import { useAccountsStore } from '@/stores/account.ts';
@@ -227,7 +233,7 @@ import { KnownFileType } from '@/core/file.ts';
 
 import { Account, type CategorizedAccountWithDisplayBalance } from '@/models/account.ts';
 import type { TransactionCategory } from '@/models/transaction_category.ts';
-import type { TransactionTag } from '@/models/transaction_tag.ts';
+import { TransactionTag } from '@/models/transaction_tag.ts';
 
 import {
     getTransactionPrimaryCategoryName,
@@ -256,6 +262,8 @@ interface BatchReplaceAllTypesDialogResponse {
 
 const { tt, getCategorizedAccountsWithDisplayBalance } = useI18n();
 
+const { allTagsWithGroupHeader } = useTransactionTagSelectionBase({ modelValue: [] }, false);
+
 const settingsStore = useSettingsStore();
 const accountsStore = useAccountsStore();
 const transactionCategoriesStore = useTransactionCategoriesStore();
@@ -278,15 +286,16 @@ let resolveFunc: ((response: BatchReplaceAllTypesDialogResponse) => void) | null
 let rejectFunc: ((reason?: unknown) => void) | null = null;
 
 const showAccountBalance = computed<boolean>(() => settingsStore.appSettings.showAccountBalance);
+const customAccountCategoryOrder = computed<string>(() => settingsStore.appSettings.accountCategoryOrders);
 const allAccounts = computed<Account[]>(() => accountsStore.allPlainAccounts);
 const allVisibleAccounts = computed<Account[]>(() => accountsStore.allVisiblePlainAccounts);
-const allVisibleCategorizedAccounts = computed<CategorizedAccountWithDisplayBalance[]>(() => getCategorizedAccountsWithDisplayBalance(allVisibleAccounts.value, showAccountBalance.value));
+const allVisibleCategorizedAccounts = computed<CategorizedAccountWithDisplayBalance[]>(() => getCategorizedAccountsWithDisplayBalance(allVisibleAccounts.value, showAccountBalance.value, customAccountCategoryOrder.value));
 const allCategories = computed<Record<number, TransactionCategory[]>>(() => transactionCategoriesStore.allTransactionCategories);
-const allTags = computed<TransactionTag[]>(() => transactionTagsStore.allTransactionTags);
+const allTagsMap = computed<Record<string, TransactionTag>>(() => transactionTagsStore.allTransactionTagsMap);
 
-const hasAvailableExpenseCategories = computed<boolean>(() => transactionCategoriesStore.hasAvailableExpenseCategories);
-const hasAvailableIncomeCategories = computed<boolean>(() => transactionCategoriesStore.hasAvailableIncomeCategories);
-const hasAvailableTransferCategories = computed<boolean>(() => transactionCategoriesStore.hasAvailableTransferCategories);
+const hasVisibleExpenseCategories = computed<boolean>(() => transactionCategoriesStore.hasVisibleExpenseCategories);
+const hasVisibleIncomeCategories = computed<boolean>(() => transactionCategoriesStore.hasVisibleIncomeCategories);
+const hasVisibleTransferCategories = computed<boolean>(() => transactionCategoriesStore.hasVisibleTransferCategories);
 
 const sourceItems = computed<NameValue[]>(() => {
     switch (newRule.value.dataType) {
@@ -350,13 +359,7 @@ function getRuleTargetValueDisplayName(rule: ImportTransactionReplaceRule): stri
         case 'account':
             return getAccountDisplayName(rule.targetId);
         case 'tag':
-            for (const tag of allTags.value) {
-                if (tag.id === rule.targetId) {
-                    return tag.name;
-                }
-            }
-
-            return '';
+            return allTagsMap.value[rule.targetId]?.name ?? '';
         default:
             return '';
     }
@@ -389,17 +392,38 @@ function open(options: { expenseCategoryNames: NameValue[], incomeCategoryNames:
 function reload(): void {
     loading.value = true;
 
-    Promise.all([
+    Promise.allSettled([
         accountsStore.loadAllAccounts({ force: true }),
         transactionCategoriesStore.loadAllCategories({ force: true }),
         transactionTagsStore.loadAllTags({ force: true })
-    ]).then(() => {
-        loading.value = false;
-    }).catch(error => {
+    ]).then(results => {
         loading.value = false;
 
-        if (!error.processed) {
-            snackbar.value?.showError(error);
+        const isAllUpToDate = results.length === 3
+            && results[0].status === 'rejected' && results[0].reason?.isUpToDate
+            && results[1].status === 'rejected' && results[1].reason?.isUpToDate
+            && results[2].status === 'rejected' && results[2].reason?.isUpToDate;
+
+        // show info if all up to date
+        if (isAllUpToDate) {
+            snackbar.value?.showMessage('Data is up to date');
+            return;
+        }
+
+        // show error if any
+        for (const result of results) {
+            if (result.status === 'rejected' && !result.reason?.isUpToDate) {
+                snackbar.value?.showError(result.reason);
+                return;
+            }
+        }
+
+        // show info if one of them updated
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                snackbar.value?.showMessage('Data has been updated');
+                return;
+            }
         }
     });
 }

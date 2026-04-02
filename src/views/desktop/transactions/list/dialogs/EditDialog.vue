@@ -1,12 +1,13 @@
 <template>
     <v-dialog width="1000" :persistent="isTransactionModified" v-model="showState">
-        <v-card class="pa-2 pa-sm-4 pa-md-8">
+        <v-card class="pa-sm-1 pa-md-2">
             <template #title>
                 <div class="d-flex align-center justify-center">
-                    <div class="d-flex w-100 align-center justify-center">
+                    <div class="d-flex align-center">
                         <h4 class="text-h4">{{ tt(title) }}</h4>
                         <v-progress-circular indeterminate size="22" class="ms-2" v-if="loading"></v-progress-circular>
                     </div>
+                    <v-spacer/>
                     <v-btn density="comfortable" color="default" variant="text" class="ms-2" :icon="true"
                            :disabled="loading || submitting" v-if="mode !== TransactionEditPageMode.View && (activeTab === 'basicInfo' || (activeTab === 'map' && isSupportGetGeoLocationByClick()))">
                         <v-icon :icon="mdiDotsVertical" />
@@ -49,7 +50,7 @@
                     </v-btn>
                 </div>
             </template>
-            <v-card-text class="d-flex flex-column flex-md-row mt-md-4 pt-0">
+            <v-card-text class="d-flex flex-column flex-md-row flex-grow-1 overflow-y-auto">
                 <div class="mb-4">
                     <v-tabs class="v-tabs-pill" direction="vertical" :class="{ 'readonly': type === TransactionEditPageType.Transaction && mode !== TransactionEditPageMode.Add }"
                             :disabled="loading || submitting" v-model="transaction.type">
@@ -123,7 +124,7 @@
                                                   v-model="transaction.destinationAmount"/>
                                 </v-col>
                                 <v-col cols="12" md="12" v-if="transaction.type === TransactionType.Expense">
-                                    <v-tooltip :disabled="hasAvailableExpenseCategories" :text="hasAvailableExpenseCategories ? '' : tt('No secondary expense categories are available')">
+                                    <v-tooltip :disabled="hasVisibleExpenseCategories" :text="hasVisibleExpenseCategories ? '' : tt('No secondary expense categories are available')">
                                         <template v-slot:activator="{ props }">
                                             <div v-bind="props" class="d-block">
                                                 <two-column-select primary-key-field="id" primary-value-field="id" primary-title-field="name"
@@ -133,7 +134,7 @@
                                                                    secondary-icon-field="icon" secondary-icon-type="category" secondary-color-field="color"
                                                                    secondary-hidden-field="hidden"
                                                                    :readonly="mode === TransactionEditPageMode.View"
-                                                                   :disabled="loading || submitting || !hasAvailableExpenseCategories"
+                                                                   :disabled="loading || submitting || !hasVisibleExpenseCategories"
                                                                    :enable-filter="true" :filter-placeholder="tt('Find category')" :filter-no-items-text="tt('No available category')"
                                                                    :show-selection-primary-text="true"
                                                                    :custom-selection-primary-text="getTransactionPrimaryCategoryName(transaction.expenseCategoryId, allCategories[CategoryType.Expense])"
@@ -147,7 +148,7 @@
                                     </v-tooltip>
                                 </v-col>
                                 <v-col cols="12" md="12" v-if="transaction.type === TransactionType.Income">
-                                    <v-tooltip :disabled="hasAvailableIncomeCategories" :text="hasAvailableIncomeCategories ? '' : tt('No secondary income categories are available')">
+                                    <v-tooltip :disabled="hasVisibleIncomeCategories" :text="hasVisibleIncomeCategories ? '' : tt('No secondary income categories are available')">
                                         <template v-slot:activator="{ props }">
                                             <div v-bind="props" class="d-block">
                                                 <two-column-select primary-key-field="id" primary-value-field="id" primary-title-field="name"
@@ -157,7 +158,7 @@
                                                                    secondary-icon-field="icon" secondary-icon-type="category" secondary-color-field="color"
                                                                    secondary-hidden-field="hidden"
                                                                    :readonly="mode === TransactionEditPageMode.View"
-                                                                   :disabled="loading || submitting || !hasAvailableIncomeCategories"
+                                                                   :disabled="loading || submitting || !hasVisibleIncomeCategories"
                                                                    :enable-filter="true" :filter-placeholder="tt('Find category')" :filter-no-items-text="tt('No available category')"
                                                                    :show-selection-primary-text="true"
                                                                    :custom-selection-primary-text="getTransactionPrimaryCategoryName(transaction.incomeCategoryId, allCategories[CategoryType.Income])"
@@ -171,7 +172,7 @@
                                     </v-tooltip>
                                 </v-col>
                                 <v-col cols="12" md="12" v-if="transaction.type === TransactionType.Transfer">
-                                    <v-tooltip :disabled="hasAvailableTransferCategories" :text="hasAvailableTransferCategories ? '' : tt('No secondary transfer categories are available')">
+                                    <v-tooltip :disabled="hasVisibleTransferCategories" :text="hasVisibleTransferCategories ? '' : tt('No secondary transfer categories are available')">
                                         <template v-slot:activator="{ props }">
                                             <div v-bind="props" class="d-block">
                                                 <two-column-select primary-key-field="id" primary-value-field="id" primary-title-field="name"
@@ -181,7 +182,7 @@
                                                                    secondary-icon-field="icon" secondary-icon-type="category" secondary-color-field="color"
                                                                    secondary-hidden-field="hidden"
                                                                    :readonly="mode === TransactionEditPageMode.View"
-                                                                   :disabled="loading || submitting || !hasAvailableTransferCategories"
+                                                                   :disabled="loading || submitting || !hasVisibleTransferCategories"
                                                                    :enable-filter="true" :filter-placeholder="tt('Find category')" :filter-no-items-text="tt('No available category')"
                                                                    :show-selection-primary-text="true"
                                                                    :custom-selection-primary-text="getTransactionPrimaryCategoryName(transaction.transferCategoryId, allCategories[CategoryType.Transfer])"
@@ -207,7 +208,7 @@
                                                                    secondary-title-field="name" secondary-footer-field="displayBalance"
                                                                    secondary-icon-field="icon" secondary-icon-type="account" secondary-color-field="color"
                                                                    :readonly="mode === TransactionEditPageMode.View"
-                                                                   :disabled="loading || submitting || !allVisibleAccounts.length"
+                                                                   :disabled="loading || submitting || !allVisibleAccounts.length || (mode === TransactionEditPageMode.Edit && transaction.type === TransactionType.ModifyBalance)"
                                                                    :enable-filter="true" :filter-placeholder="tt('Find account')" :filter-no-items-text="tt('No available account')"
                                                                    :custom-selection-primary-text="sourceAccountName"
                                                                    :label="tt(sourceAccountTitle)"
@@ -247,9 +248,11 @@
                                 <v-col cols="12" md="6" v-if="type === TransactionEditPageType.Transaction">
                                     <date-time-select
                                         :readonly="mode === TransactionEditPageMode.View"
-                                        :disabled="loading || submitting"
+                                        :disabled="loading || submitting || (mode === TransactionEditPageMode.Edit && transaction.type === TransactionType.ModifyBalance)"
                                         :label="tt('Transaction Time')"
-                                        v-model="transaction.time"
+                                        :timezone-utc-offset="transaction.utcOffset"
+                                        :model-value="transaction.time"
+                                        @update:model-value="updateTransactionTime"
                                         @error="onShowDateTimeError" />
                                 </v-col>
                                 <v-col cols="12" md="6" v-if="type === TransactionEditPageType.Template && transaction instanceof TransactionTemplate && transaction.templateType === TemplateType.Schedule.type">
@@ -268,12 +271,13 @@
                                         auto-select-first
                                         persistent-placeholder
                                         :readonly="mode === TransactionEditPageMode.View"
-                                        :disabled="loading || submitting"
+                                        :disabled="loading || submitting || (mode === TransactionEditPageMode.Edit && transaction.type === TransactionType.ModifyBalance)"
                                         :label="tt('Transaction Timezone')"
                                         :placeholder="!transaction.timeZone && transaction.timeZone !== '' ? `(${transactionDisplayTimezone}) ${transactionTimezoneTimeDifference}` : tt('Timezone')"
                                         :items="allTimezones"
                                         :no-data-text="tt('No results')"
-                                        v-model="transaction.timeZone"
+                                        :model-value="transaction.timeZone"
+                                        @update:model-value="updateTransactionTimezone"
                                     >
                                         <template #selection="{ item }">
                                             <span class="text-truncate" v-if="transaction.timeZone || transaction.timeZone === ''">
@@ -323,57 +327,14 @@
                                     </v-select>
                                 </v-col>
                                 <v-col cols="12" md="12">
-                                    <v-autocomplete
-                                        item-title="name"
-                                        item-value="id"
-                                        auto-select-first
-                                        persistent-placeholder
-                                        multiple
-                                        chips
-                                        :closable-chips="mode !== TransactionEditPageMode.View"
+                                    <transaction-tag-auto-complete
                                         :readonly="mode === TransactionEditPageMode.View"
                                         :disabled="loading || submitting"
-                                        :label="tt('Tags')"
-                                        :placeholder="tt('None')"
-                                        :items="allTags"
+                                        :show-label="true"
+                                        :allow-add-new-tag="true"
                                         v-model="transaction.tagIds"
-                                        v-model:search="tagSearchContent"
-                                    >
-                                        <template #chip="{ props, item }">
-                                            <v-chip :prepend-icon="mdiPound" :text="item.title" v-bind="props"/>
-                                        </template>
-
-                                        <template #item="{ props, item }">
-                                            <v-list-item :value="item.value" v-bind="props" v-if="!item.raw.hidden">
-                                                <template #title>
-                                                    <v-list-item-title>
-                                                        <div class="d-flex align-center">
-                                                            <v-icon size="20" start :icon="mdiPound"/>
-                                                            <span>{{ item.title }}</span>
-                                                        </div>
-                                                    </v-list-item-title>
-                                                </template>
-                                            </v-list-item>
-                                            <v-list-item :disabled="true" v-bind="props"
-                                                         v-if="item.raw.hidden && item.raw.name.toLowerCase().indexOf(tagSearchContent.toLowerCase()) >= 0 && isAllFilteredTagHidden">
-                                                <template #title>
-                                                    <v-list-item-title>
-                                                        <div class="d-flex align-center">
-                                                            <v-icon size="20" start :icon="mdiPound"/>
-                                                            <span>{{ item.title }}</span>
-                                                        </div>
-                                                    </v-list-item-title>
-                                                </template>
-                                            </v-list-item>
-                                        </template>
-
-                                        <template #no-data>
-                                            <v-list class="py-0">
-                                                <v-list-item v-if="tagSearchContent" @click="saveNewTag(tagSearchContent)">{{ tt('format.misc.addNewTag', { tag: tagSearchContent }) }}</v-list-item>
-                                                <v-list-item v-else-if="!tagSearchContent">{{ tt('No available tag') }}</v-list-item>
-                                            </v-list>
-                                        </template>
-                                    </v-autocomplete>
+                                        @tag:saving="onSavingTag"
+                                    />
                                 </v-col>
                                 <v-col cols="12" md="12">
                                     <v-textarea
@@ -393,7 +354,9 @@
                     <v-window-item value="map">
                         <v-row>
                             <v-col cols="12" md="12">
-                                <map-view ref="map" map-class="transaction-edit-map-view" :geo-location="transaction.geoLocation" @click="updateSpecifiedGeoLocation">
+                                <map-view ref="map" map-class="transaction-edit-map-view"
+                                          :enable-zoom-control="true" :geo-location="transaction.geoLocation"
+                                          @click="updateSpecifiedGeoLocation">
                                     <template #error-title="{ mapSupported, mapDependencyLoaded }">
                                         <span class="text-subtitle-1" v-if="!mapSupported"><b>{{ tt('Unsupported Map Provider') }}</b></span>
                                         <span class="text-subtitle-1" v-else-if="!mapDependencyLoaded"><b>{{ tt('Cannot Initialize Map') }}</b></span>
@@ -446,16 +409,30 @@
                     </v-window-item>
                 </v-window>
             </v-card-text>
-            <v-card-text class="overflow-y-visible">
-                <div class="w-100 d-flex justify-center flex-wrap mt-2 mt-sm-4 mt-md-6 gap-4">
+            <v-card-text>
+                <div class="w-100 d-flex justify-center flex-wrap mt-sm-1 mt-md-2 gap-4">
                     <v-tooltip :disabled="!inputIsEmpty" :text="inputEmptyProblemMessage ? tt(inputEmptyProblemMessage) : ''">
                         <template v-slot:activator="{ props }">
                             <div v-bind="props" class="d-inline-block">
-                                <v-btn :disabled="inputIsEmpty || loading || submitting"
-                                       v-if="mode !== TransactionEditPageMode.View" @click="save">
-                                    {{ tt(saveButtonTitle) }}
-                                    <v-progress-circular indeterminate size="22" class="ms-2" v-if="submitting"></v-progress-circular>
-                                </v-btn>
+                                <v-btn-group density="comfortable" v-if="mode === TransactionEditPageMode.Add || mode === TransactionEditPageMode.Edit">
+                                    <v-btn color="primary" :disabled="inputIsEmpty || loading || submitting" @click="save(AfterSaveAction.GoBack)">
+                                        {{ tt(saveButtonTitle) }}
+                                        <v-progress-circular indeterminate size="22" class="ms-2" v-if="submitting"></v-progress-circular>
+                                    </v-btn>
+                                    <v-btn color="primary" density="compact"
+                                           :disabled="inputIsEmpty || loading || submitting" :icon="true"
+                                           v-if="type === TransactionEditPageType.Transaction && mode === TransactionEditPageMode.Add">
+                                        <v-icon :icon="mdiMenuDown" size="24" />
+                                        <v-menu activator="parent">
+                                            <v-list>
+                                                <v-list-item :title="tt(TransactionQuickAddButtonActionType.SaveAndAddNewTransaction.name)"
+                                                             @click="save(AfterSaveAction.StayWithNewTransaction)"></v-list-item>
+                                                <v-list-item :title="tt(TransactionQuickAddButtonActionType.SaveAndKeepCurrentData.name)"
+                                                             @click="save(AfterSaveAction.StayWithCurrentTransaction)"></v-list-item>
+                                            </v-list>
+                                        </v-menu>
+                                    </v-btn>
+                                </v-btn-group>
                             </div>
                         </template>
                     </v-tooltip>
@@ -511,6 +488,7 @@ import {
     TransactionEditPageMode,
     TransactionEditPageType,
     GeoLocationStatus,
+    AfterSaveAction,
     useTransactionEditPageBase
 } from '@/views/base/transactions/TransactionEditPageBase.ts';
 
@@ -524,12 +502,11 @@ import { useTransactionTemplatesStore } from '@/stores/transactionTemplate.ts';
 
 import type { Coordinate } from '@/core/coordinate.ts';
 import { CategoryType } from '@/core/category.ts';
-import { TransactionType, TransactionEditScopeType } from '@/core/transaction.ts';
+import { TransactionType, TransactionEditScopeType, TransactionQuickAddButtonActionType } from '@/core/transaction.ts';
 import { TemplateType, ScheduledTemplateFrequencyType } from '@/core/template.ts';
 import { KnownErrorCode } from '@/consts/api.ts';
 import { SUPPORTED_IMAGE_EXTENSIONS } from '@/consts/file.ts';
 
-import { TransactionTag } from '@/models/transaction_tag.ts';
 import { TransactionTemplate } from '@/models/transaction_template.ts';
 import type { TransactionPictureInfoBasicResponse } from '@/models/transaction_picture_info.ts';
 import { Transaction } from '@/models/transaction.ts';
@@ -544,7 +521,7 @@ import {
     getTransactionPrimaryCategoryName,
     getTransactionSecondaryCategoryName
 } from '@/lib/category.ts';
-import { type SetTransactionOptions, setTransactionModelByTransaction } from '@/lib/transaction.ts';
+import { type SetTransactionOptions } from '@/lib/transaction.ts';
 import {
     isTransactionPicturesEnabled,
     getMapProvider
@@ -561,7 +538,6 @@ import {
     mdiSwapHorizontal,
     mdiMapMarkerOutline,
     mdiCheck,
-    mdiPound,
     mdiMenuDown,
     mdiImagePlusOutline,
     mdiTrashCanOutline,
@@ -602,24 +578,21 @@ const {
     clientSessionId,
     loading,
     submitting,
+    submitted,
     uploadingPicture,
     geoLocationStatus,
     setGeoLocationByClickMap,
     transaction,
     defaultCurrency,
-    defaultAccountId,
     coordinateDisplayType,
     allTimezones,
     allVisibleAccounts,
-    allAccountsMap,
     allVisibleCategorizedAccounts,
     allCategories,
-    allCategoriesMap,
-    allTags,
-    allTagsMap,
-    hasAvailableExpenseCategories,
-    hasAvailableIncomeCategories,
-    hasAvailableTransferCategories,
+    firstVisibleAccountId,
+    hasVisibleExpenseCategories,
+    hasVisibleIncomeCategories,
+    hasVisibleTransferCategories,
     canAddTransactionPicture,
     title,
     saveButtonTitle,
@@ -638,6 +611,10 @@ const {
     inputEmptyProblemMessage,
     inputIsEmpty,
     createNewTransactionModel,
+    setTransactionModel,
+    updateTransactionModelByAfterSaveAction,
+    updateTransactionTime,
+    updateTransactionTimezone,
     swapTransactionData,
     getTransactionPictureUrl
 } = useTransactionEditPageBase(props.type);
@@ -660,13 +637,9 @@ const activeTab = ref<string>('basicInfo');
 const originalTransactionEditable = ref<boolean>(false);
 const noTransactionDraft = ref<boolean>(false);
 const geoMenuState = ref<boolean>(false);
-const tagSearchContent = ref<string>('');
 const removingPictureId = ref<string>('');
 
-const initAmount = ref<number | undefined>(undefined);
-const initCategoryId = ref<string | undefined>(undefined);
-const initAccountId = ref<string | undefined>(undefined);
-const initTagIds = ref<string | undefined>(undefined);
+const initOptions = ref<TransactionEditOptions | undefined>(undefined);
 
 let resolveFunc: ((response?: TransactionEditResponse) => void) | null = null;
 let rejectFunc: ((reason?: unknown) => void) | null = null;
@@ -683,58 +656,15 @@ const sourceAmountColor = computed<string | undefined>(() => {
     return undefined;
 });
 
-const isAllFilteredTagHidden = computed<boolean>(() => {
-    const lowerCaseTagSearchContent = tagSearchContent.value.toLowerCase();
-    let hiddenCount = 0;
-
-    for (const tag of allTags.value) {
-        if (!lowerCaseTagSearchContent || tag.name.toLowerCase().indexOf(lowerCaseTagSearchContent) >= 0) {
-            if (!tag.hidden) {
-                return false;
-            }
-
-            hiddenCount++;
-        }
-    }
-
-    return hiddenCount > 0;
-});
-
 const isTransactionModified = computed<boolean>(() => {
     if (mode.value === TransactionEditPageMode.Add) {
-        return transactionsStore.isTransactionDraftModified(transaction.value, initAmount.value, initCategoryId.value, initAccountId.value, initTagIds.value);
+        return transactionsStore.isTransactionDraftModified(transaction.value, initOptions.value?.amount, initOptions.value?.categoryId, initOptions.value?.accountId, initOptions.value?.tagIds, firstVisibleAccountId.value);
     } else if (mode.value === TransactionEditPageMode.Edit) {
         return true;
     } else {
         return false;
     }
 });
-
-function setTransaction(newTransaction: Transaction | null, options: SetTransactionOptions, setContextData: boolean, convertContextTime: boolean): void {
-    setTransactionModelByTransaction(
-        transaction.value,
-        newTransaction,
-        allCategories.value,
-        allCategoriesMap.value,
-        allVisibleAccounts.value,
-        allAccountsMap.value,
-        allTagsMap.value,
-        defaultAccountId.value,
-        {
-            time: options.time,
-            type: options.type,
-            categoryId: options.categoryId,
-            accountId: options.accountId,
-            destinationAccountId: options.destinationAccountId,
-            amount: options.amount,
-            destinationAmount: options.destinationAmount,
-            tagIds: options.tagIds,
-            comment: options.comment
-        },
-        setContextData,
-        convertContextTime
-    );
-}
 
 function open(options: TransactionEditOptions): Promise<TransactionEditResponse | undefined> {
     addByTemplateId.value = null;
@@ -743,18 +673,16 @@ function open(options: TransactionEditOptions): Promise<TransactionEditResponse 
     activeTab.value = 'basicInfo';
     loading.value = true;
     submitting.value = false;
+    submitted.value = false;
     geoLocationStatus.value = null;
     setGeoLocationByClickMap.value = false;
     originalTransactionEditable.value = false;
     noTransactionDraft.value = options.noTransactionDraft || false;
 
-    initAmount.value = options.amount;
-    initCategoryId.value = options.categoryId;
-    initAccountId.value = options.accountId;
-    initTagIds.value = options.tagIds;
+    initOptions.value = options;
 
     const newTransaction = createNewTransactionModel(options.type);
-    setTransaction(newTransaction, options, true, false);
+    setTransactionModel(newTransaction, options, true);
 
     const promises: Promise<unknown>[] = [
         accountsStore.loadAllAccounts({ force: false }),
@@ -765,7 +693,7 @@ function open(options: TransactionEditOptions): Promise<TransactionEditResponse 
     if (props.type === TransactionEditPageType.Transaction) {
         if (options && options.id) {
             if (options.currentTransaction) {
-                setTransaction(options.currentTransaction, options, true, true);
+                setTransactionModel(options.currentTransaction, options, true);
             }
 
             mode.value = TransactionEditPageMode.View;
@@ -777,10 +705,10 @@ function open(options: TransactionEditOptions): Promise<TransactionEditResponse 
             editId.value = null;
 
             if (options.template) {
-                setTransaction(options.template, options, false, false);
+                setTransactionModel(options.template, options, false);
                 addByTemplateId.value = options.template.id;
             } else if (!options.noTransactionDraft && (settingsStore.appSettings.autoSaveTransactionDraft === 'enabled' || settingsStore.appSettings.autoSaveTransactionDraft === 'confirmation') && transactionsStore.transactionDraft) {
-                setTransaction(Transaction.ofDraft(transactionsStore.transactionDraft), options, false, false);
+                setTransactionModel(Transaction.ofDraft(transactionsStore.transactionDraft), options, false);
             }
 
             if (settingsStore.appSettings.autoGetCurrentGeoLocation
@@ -805,7 +733,7 @@ function open(options: TransactionEditOptions): Promise<TransactionEditResponse 
 
         if (options && options.id) {
             if (options.currentTemplate) {
-                setTransaction(options.currentTemplate, options, false, false);
+                setTransactionModel(options.currentTemplate, options, false);
                 (transaction.value as TransactionTemplate).fillFrom(options.currentTemplate);
             }
 
@@ -846,11 +774,11 @@ function open(options: TransactionEditOptions): Promise<TransactionEditResponse 
 
         if (props.type === TransactionEditPageType.Transaction && options && options.id && responses[3] && responses[3] instanceof Transaction) {
             const transaction: Transaction = responses[3];
-            setTransaction(transaction, options, true, true);
+            setTransactionModel(transaction, options, true);
             originalTransactionEditable.value = transaction.editable;
         } else if (props.type === TransactionEditPageType.Template && options && options.id && responses[3] && responses[3] instanceof TransactionTemplate) {
             const template: TransactionTemplate = responses[3];
-            setTransaction(template, options, false, false);
+            setTransactionModel(template, options, false);
 
             if (!(transaction.value instanceof TransactionTemplate)) {
                 transaction.value = TransactionTemplate.createNewTransactionTemplate(transaction.value);
@@ -858,7 +786,7 @@ function open(options: TransactionEditOptions): Promise<TransactionEditResponse 
 
             (transaction.value as TransactionTemplate).fillFrom(template);
         } else {
-            setTransaction(null, options, true, true);
+            setTransactionModel(null, options, true);
         }
 
         loading.value = false;
@@ -881,7 +809,7 @@ function open(options: TransactionEditOptions): Promise<TransactionEditResponse 
     });
 }
 
-function save(): void {
+function save(afterAction: AfterSaveAction): void {
     const problemMessage = inputEmptyProblemMessage.value;
 
     if (problemMessage) {
@@ -900,24 +828,31 @@ function save(): void {
                 clientSessionId: clientSessionId.value
             }).then(() => {
                 submitting.value = false;
-
-                if (resolveFunc) {
-                    if (mode.value === TransactionEditPageMode.Add) {
-                        resolveFunc({
-                            message: 'You have added a new transaction'
-                        });
-                    } else if (mode.value === TransactionEditPageMode.Edit) {
-                        resolveFunc({
-                            message: 'You have saved this transaction'
-                        });
-                    }
-                }
+                submitted.value = true;
 
                 if (mode.value === TransactionEditPageMode.Add && !noTransactionDraft.value && !addByTemplateId.value && !duplicateFromId.value) {
                     transactionsStore.clearTransactionDraft();
                 }
 
-                showState.value = false;
+                if (mode.value === TransactionEditPageMode.Add && (afterAction === AfterSaveAction.StayWithNewTransaction || afterAction === AfterSaveAction.StayWithCurrentTransaction)) {
+                    snackbar.value?.showMessage('You have added a new transaction');
+                    updateTransactionModelByAfterSaveAction(afterAction, initOptions.value);
+                    clientSessionId.value = generateRandomUUID();
+                } else {
+                    if (resolveFunc) {
+                        if (mode.value === TransactionEditPageMode.Add) {
+                            resolveFunc({
+                                message: 'You have added a new transaction'
+                            });
+                        } else if (mode.value === TransactionEditPageMode.Edit) {
+                            resolveFunc({
+                                message: 'You have saved this transaction'
+                            });
+                        }
+                    }
+
+                    showState.value = false;
+                }
             }).catch(error => {
                 submitting.value = false;
 
@@ -993,13 +928,14 @@ function duplicate(withTime?: boolean, withGeoLocation?: boolean): void {
     editId.value = null;
     duplicateFromId.value = transaction.value.id;
     clientSessionId.value = generateRandomUUID();
+    submitted.value = false;
     activeTab.value = 'basicInfo';
     transaction.value.id = '';
 
     if (!withTime) {
         transaction.value.time = getCurrentUnixTime();
         transaction.value.timeZone = settingsStore.appSettings.timeZone;
-        transaction.value.utcOffset = getTimezoneOffsetMinutes(transaction.value.timeZone);
+        transaction.value.utcOffset = getTimezoneOffsetMinutes(transaction.value.time, transaction.value.timeZone);
     }
 
     if (!withGeoLocation) {
@@ -1048,7 +984,11 @@ function remove(): void {
 
 function cancel(): void {
     const doClose = function () {
-        if (rejectFunc) {
+        if (props.type === TransactionEditPageType.Transaction && mode.value === TransactionEditPageMode.Add && submitted.value && resolveFunc) {
+            resolveFunc({
+                message: 'You have added a new transaction'
+            });
+        } else if (rejectFunc) {
             rejectFunc();
         }
 
@@ -1061,9 +1001,9 @@ function cancel(): void {
     }
 
     if (settingsStore.appSettings.autoSaveTransactionDraft === 'confirmation') {
-        if (transactionsStore.isTransactionDraftModified(transaction.value, initAmount.value, initCategoryId.value, initAccountId.value, initTagIds.value)) {
+        if (transactionsStore.isTransactionDraftModified(transaction.value, initOptions.value?.amount, initOptions.value?.categoryId, initOptions.value?.accountId, initOptions.value?.tagIds, firstVisibleAccountId.value)) {
             confirmDialog.value?.open('Do you want to save this transaction draft?').then(() => {
-                transactionsStore.saveTransactionDraft(transaction.value, initAmount.value, initCategoryId.value, initAccountId.value, initTagIds.value);
+                transactionsStore.saveTransactionDraft(transaction.value, initOptions.value?.amount, initOptions.value?.categoryId, initOptions.value?.accountId, initOptions.value?.tagIds, firstVisibleAccountId.value);
                 doClose();
             }).catch(() => {
                 transactionsStore.clearTransactionDraft();
@@ -1074,7 +1014,7 @@ function cancel(): void {
             doClose();
         }
     } else if (settingsStore.appSettings.autoSaveTransactionDraft === 'enabled') {
-        transactionsStore.saveTransactionDraft(transaction.value, initAmount.value, initCategoryId.value, initAccountId.value, initTagIds.value);
+        transactionsStore.saveTransactionDraft(transaction.value, initOptions.value?.amount, initOptions.value?.categoryId, initOptions.value?.accountId, initOptions.value?.tagIds, firstVisibleAccountId.value);
         doClose();
     } else {
         doClose();
@@ -1131,26 +1071,6 @@ function clearGeoLocation(): void {
     geoMenuState.value = false;
     geoLocationStatus.value = null;
     transaction.value.removeGeoLocation();
-}
-
-function saveNewTag(tagName: string): void {
-    submitting.value = true;
-
-    transactionTagsStore.saveTag({
-        tag: TransactionTag.createNewTag(tagName)
-    }).then(tag => {
-        submitting.value = false;
-
-        if (tag && tag.id) {
-            transaction.value.tagIds.push(tag.id);
-        }
-    }).catch(error => {
-        submitting.value = false;
-
-        if (!error.processed) {
-            snackbar.value?.showError(error);
-        }
-    });
 }
 
 function showOpenPictureDialog(): void {
@@ -1223,6 +1143,10 @@ function viewOrRemovePicture(pictureInfo: TransactionPictureInfoBasicResponse): 
     });
 }
 
+function onSavingTag(state: boolean): void {
+    submitting.value = state;
+}
+
 function onShowDateTimeError(error: string): void {
     snackbar.value?.showError(error);
 }
@@ -1249,6 +1173,7 @@ defineExpose({
 
 .transaction-edit-timezone.v-input input::placeholder {
     color: rgba(var(--v-theme-on-background), var(--v-high-emphasis-opacity)) !important;
+    opacity: unset;
 }
 
 .transaction-edit-map-view {
@@ -1257,48 +1182,36 @@ defineExpose({
 
 @media (min-height: 630px) {
     .transaction-edit-map-view {
-        height: 300px;
+        height: 390px;
     }
 
     @media (min-width: 960px) {
         .transaction-pictures {
-            min-height: 300px;
+            min-height: 414px;
         }
     }
 }
 
 @media (min-height: 700px) {
     .transaction-edit-map-view {
-        height: 350px;
+        height: 460px;
     }
 
     @media (min-width: 960px) {
         .transaction-pictures {
-            min-height: 350px;
+            min-height: 484px;
         }
     }
 }
 
-@media (min-height: 800px) {
+@media (min-height: 780px) {
     .transaction-edit-map-view {
-        height: 450px;
+        height: 537px;
     }
 
     @media (min-width: 960px) {
         .transaction-pictures {
-            min-height: 450px;
-        }
-    }
-}
-
-@media (min-height: 900px) {
-    .transaction-edit-map-view {
-        height: 550px;
-    }
-
-    @media (min-width: 960px) {
-        .transaction-pictures {
-            min-height: 550px;
+            min-height: 561px;
         }
     }
 }

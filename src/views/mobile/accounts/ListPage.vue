@@ -1,12 +1,15 @@
 <template>
     <f7-page :ptr="!sortable" @ptr:refresh="reload" @page:afterin="onPageAfterIn">
         <f7-navbar>
-            <f7-nav-left :back-link="tt('Back')"></f7-nav-left>
+            <f7-nav-left :class="{ 'disabled': loading }" :back-link="tt('Back')" v-if="!sortable"></f7-nav-left>
+            <f7-nav-left v-else-if="sortable">
+                <f7-link icon-f7="xmark" :class="{ 'disabled': displayOrderSaving }" @click="cancelSort"></f7-link>
+            </f7-nav-left>
             <f7-nav-title :title="tt('Account List')"></f7-nav-title>
-            <f7-nav-right class="navbar-compact-icons">
-                <f7-link icon-f7="ellipsis" :class="{ 'disabled': !allAccountCount }" v-if="!sortable" @click="showMoreActionSheet = true"></f7-link>
-                <f7-link href="/account/add" icon-f7="plus" v-if="!sortable"></f7-link>
-                <f7-link :text="tt('Done')" :class="{ 'disabled': displayOrderSaving }" @click="saveSortResult" v-else-if="sortable"></f7-link>
+            <f7-nav-right :class="{ 'navbar-compact-icons': true, 'disabled': loading }">
+                <f7-link icon-f7="ellipsis" :class="{ 'disabled': !allAccountCount || sortable }" @click="showMoreActionSheet = true"></f7-link>
+                <f7-link icon-f7="plus" href="/account/add" v-if="!sortable"></f7-link>
+                <f7-link icon-f7="checkmark_alt" :class="{ 'disabled': displayOrderSaving || !displayOrderModified }" @click="saveSortResult" v-else-if="sortable"></f7-link>
             </f7-nav-right>
         </f7-navbar>
 
@@ -19,7 +22,7 @@
                 <p class="no-margin">
                     <span class="net-assets" v-if="loading">0.00 USD</span>
                     <span class="net-assets" v-else-if="!loading">{{ netAssets }}</span>
-                    <f7-link class="margin-inline-start-half" @click="showAccountBalance = !showAccountBalance">
+                    <f7-link class="display-inline-flex margin-inline-start-half" @click="showAccountBalance = !showAccountBalance">
                         <f7-icon class="ebk-hide-icon" :f7="showAccountBalance ? 'eye_slash_fill' : 'eye_fill'"></f7-icon>
                     </f7-link>
                 </p>
@@ -68,7 +71,7 @@
         </f7-list>
 
         <div :key="accountCategory.type"
-             v-for="accountCategory in AccountCategory.values()"
+             v-for="accountCategory in AccountCategory.values(customAccountCategoryOrder)"
              v-show="!loading && ((showHidden && hasAccount(accountCategory, false)) || hasAccount(accountCategory, true))">
             <f7-list strong inset dividers sortable class="list-has-group-title account-list margin-vertical"
                      :sortable-enabled="sortable"
@@ -162,12 +165,18 @@
             <f7-actions-group v-if="accountForMoreActionSheet && accountForMoreActionSheet.type === AccountType.SingleAccount.type">
                 <f7-actions-button @click="showReconciliationStatement(accountForMoreActionSheet)">{{ tt('Reconciliation Statement') }}</f7-actions-button>
             </f7-actions-group>
+            <f7-actions-group v-if="accountForMoreActionSheet && accountForMoreActionSheet.type === AccountType.SingleAccount.type">
+                <f7-actions-button @click="moveAllTransactions(accountForMoreActionSheet)">{{ tt('Move All Transactions') }}</f7-actions-button>
+                <f7-actions-button color="red" @click="showPasswordSheetForClearAllTransaction(accountForMoreActionSheet)">{{ tt('Clear All Transactions') }}</f7-actions-button>
+            </f7-actions-group>
             <template v-if="accountForMoreActionSheet && accountForMoreActionSheet.type === AccountType.MultiSubAccounts.type">
                 <f7-actions-group :key="subAccount.id"
                                   v-for="subAccount in accountForMoreActionSheet.subAccounts"
                                   v-show="showHidden || !subAccount.hidden">
                     <f7-actions-label>{{ subAccount.name }}</f7-actions-label>
                     <f7-actions-button @click="showReconciliationStatement(subAccount)">{{ tt('Reconciliation Statement') }}</f7-actions-button>
+                    <f7-actions-button @click="moveAllTransactions(subAccount)">{{ tt('Move All Transactions') }}</f7-actions-button>
+                    <f7-actions-button color="red" @click="showPasswordSheetForClearAllTransaction(subAccount)">{{ tt('Clear All Transactions') }}</f7-actions-button>
                 </f7-actions-group>
             </template>
             <f7-actions-group>
@@ -177,7 +186,7 @@
 
         <f7-actions close-by-outside-click close-on-escape :opened="showMoreActionSheet" @actions:closed="showMoreActionSheet = false">
             <f7-actions-group>
-                <f7-actions-button @click="setSortable()">{{ tt('Sort') }}</f7-actions-button>
+                <f7-actions-button :class="{ 'disabled': maxCategoryAccountCount < 2 }" @click="setSortable()">{{ tt('Sort') }}</f7-actions-button>
                 <f7-actions-button v-if="!showHidden" @click="showHidden = true">{{ tt('Show Hidden Accounts') }}</f7-actions-button>
                 <f7-actions-button v-if="showHidden" @click="showHidden = false">{{ tt('Hide Hidden Accounts') }}</f7-actions-button>
             </f7-actions-group>
@@ -198,6 +207,16 @@
                 <f7-actions-button bold close>{{ tt('Cancel') }}</f7-actions-button>
             </f7-actions-group>
         </f7-actions>
+
+        <password-input-sheet :title="tt('Are you sure you want to clear all transactions?')"
+                              :hint="tt('format.misc.clearTransactionsInAccountTip', { account: accountToClearTransactions?.name ?? 'undefined' })"
+                              :confirm-disabled="clearingData"
+                              :cancel-disabled="clearingData"
+                              color="red"
+                              v-model:show="showInputPasswordSheetForClearAllTransactions"
+                              v-model="currentPasswordForClearData"
+                              @password:confirm="clearAllTransactions">
+        </password-input-sheet>
     </f7-page>
 </template>
 
@@ -207,8 +226,9 @@ import type { Router } from 'framework7/types';
 
 import { useI18n } from '@/locales/helpers.ts';
 import { useI18nUIComponents, showLoading, hideLoading } from '@/lib/ui/mobile.ts';
-import { useAccountListPageBaseBase } from '@/views/base/accounts/AccountListPageBase.ts';
+import { useAccountListPageBase } from '@/views/base/accounts/AccountListPageBase.ts';
 
+import { useRootStore } from '@/stores/index.ts';
 import { useAccountsStore } from '@/stores/account.ts';
 
 import { TextDirection } from '@/core/text.ts';
@@ -229,24 +249,31 @@ const {
     showHidden,
     displayOrderModified,
     showAccountBalance,
+    customAccountCategoryOrder,
     allCategorizedAccountsMap,
     allAccountCount,
+    maxCategoryAccountCount,
     netAssets,
     totalAssets,
     totalLiabilities,
     accountCategoryTotalBalance,
     accountBalance
-} = useAccountListPageBaseBase();
+} = useAccountListPageBase();
 
+const rootStore = useRootStore();
 const accountsStore = useAccountsStore();
 
 const loadingError = ref<unknown | null>(null);
 const sortable = ref<boolean>(false);
 const accountForMoreActionSheet = ref<Account | null>(null);
 const accountToDelete = ref<Account | null>(null);
+const accountToClearTransactions = ref<Account | null>(null);
+const currentPasswordForClearData = ref<string>('');
+const clearingData = ref<boolean>(false);
 const showAccountMoreActionSheet = ref<boolean>(false);
 const showMoreActionSheet = ref<boolean>(false);
 const showDeleteActionSheet = ref<boolean>(false);
+const showInputPasswordSheetForClearAllTransactions = ref<boolean>(false);
 const displayOrderSaving = ref<boolean>(false);
 
 const textDirection = computed<TextDirection>(() => getCurrentLanguageTextDirection());
@@ -343,6 +370,59 @@ function showReconciliationStatement(account: Account | null): void {
     accountForMoreActionSheet.value = null;
 }
 
+function moveAllTransactions(account: Account | null): void {
+    if (!account) {
+        showAlert('An error occurred');
+        return;
+    }
+
+    props.f7router.navigate('/account/move_all_transactions?fromAccountId=' + account.id);
+    showAccountMoreActionSheet.value = false;
+    accountForMoreActionSheet.value = null;
+}
+
+function showPasswordSheetForClearAllTransaction(account: Account | null): void {
+    if (!account) {
+        showAlert('An error occurred');
+        return;
+    }
+
+    accountToClearTransactions.value = account;
+    currentPasswordForClearData.value = '';
+    showInputPasswordSheetForClearAllTransactions.value = true;
+    showAccountMoreActionSheet.value = false;
+    accountForMoreActionSheet.value = null;
+}
+
+function clearAllTransactions(password: string): void {
+    if (!accountToClearTransactions.value) {
+        showAlert('An error occurred');
+        return;
+    }
+
+    clearingData.value = true;
+    showLoading(() => clearingData.value);
+
+    rootStore.clearAllUserTransactionsOfAccount({
+        accountId: accountToClearTransactions.value.id,
+        password: password
+    }).then(() => {
+        clearingData.value = false;
+        currentPasswordForClearData.value = '';
+        hideLoading();
+
+        showInputPasswordSheetForClearAllTransactions.value = false;
+        showToast('All transactions in this account have been cleared');
+    }).catch(error => {
+        clearingData.value = false;
+        hideLoading();
+
+        if (!error.processed) {
+            showToast(error.message || error);
+        }
+    });
+}
+
 function hide(account: Account, hidden: boolean): void {
     showLoading();
 
@@ -413,6 +493,35 @@ function saveSortResult(): void {
     showLoading();
 
     accountsStore.updateAccountDisplayOrders().then(() => {
+        displayOrderSaving.value = false;
+        hideLoading();
+
+        showHidden.value = false;
+        sortable.value = false;
+        displayOrderModified.value = false;
+    }).catch(error => {
+        displayOrderSaving.value = false;
+        hideLoading();
+
+        if (!error.processed) {
+            showToast(error.message || error);
+        }
+    });
+}
+
+function cancelSort(): void {
+    if (!displayOrderModified.value) {
+        showHidden.value = false;
+        sortable.value = false;
+        return;
+    }
+
+    displayOrderSaving.value = true;
+    showLoading();
+
+    accountsStore.loadAllAccounts({
+        force: false
+    }).then(() => {
         displayOrderSaving.value = false;
         hideLoading();
 

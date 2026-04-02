@@ -12,19 +12,40 @@ type TokenRecord struct {
 	TokenType        core.TokenType `xorm:"INDEX(IDX_token_record_uid_type_expired_time) TINYINT NOT NULL"`
 	Secret           string         `xorm:"VARCHAR(10) NOT NULL"`
 	UserAgent        string         `xorm:"VARCHAR(255)"`
+	Context          string         `xorm:"BLOB"`
 	CreatedUnixTime  int64          `xorm:"PK"`
 	ExpiredUnixTime  int64          `xorm:"INDEX(IDX_token_record_uid_type_expired_time) INDEX(IDX_token_record_expired_time)"`
 	LastSeenUnixTime int64
 }
 
+// OAuth2CallbackTokenContext represents the context data of oauth 2.0 callback token
+type OAuth2CallbackTokenContext struct {
+	ExternalAuthType core.UserExternalAuthType `json:"externalAuthType"`
+	ExternalUsername string                    `json:"externalUsername"`
+	ExternalEmail    string                    `json:"externalEmail"`
+}
+
+// TokenGenerateAPIRequest represents all parameters of api token generation request
+type TokenGenerateAPIRequest struct {
+	ExpiredInSeconds int64  `json:"expiresInSeconds" binding:"omitempty,min=0,max=4294967295"`
+	Password         string `json:"password" binding:"omitempty,min=6,max=128"`
+}
+
 // TokenGenerateMCPRequest represents all parameters of mcp token generation request
 type TokenGenerateMCPRequest struct {
-	Password string `json:"password" binding:"omitempty,min=6,max=128"`
+	ExpiredInSeconds int64  `json:"expiresInSeconds" binding:"omitempty,min=0,max=4294967295"`
+	Password         string `json:"password" binding:"omitempty,min=6,max=128"`
 }
 
 // TokenRevokeRequest represents all parameters of token revoking request
 type TokenRevokeRequest struct {
 	TokenId string `json:"tokenId" binding:"required,notBlank"`
+}
+
+// TokenGenerateAPIResponse represents all response parameters of generated api token
+type TokenGenerateAPIResponse struct {
+	Token      string `json:"token"`
+	APIBaseUrl string `json:"apiBaseUrl"`
 }
 
 // TokenGenerateMCPResponse represents all response parameters of generated mcp token
